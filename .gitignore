@@ -1,0 +1,13 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+data/landing/*
+!data/landing/.gitkeep
+data/checksums/*
+!data/checksums/.gitkeep
+*.backup
+*.sql.gz
+.streamlit/secrets.toml
+notebooks/.ipynb_checkpoints/
