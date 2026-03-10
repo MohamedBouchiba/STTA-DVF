@@ -1,4 +1,4 @@
-"""Telechargement des archives DVF+ depuis Cerema Box."""
+"""Telechargement des CSV DVF geolocalisees depuis Etalab."""
 
 import hashlib
 import json
@@ -8,24 +8,7 @@ from pathlib import Path
 import requests
 from tqdm import tqdm
 
-from src.config import LANDING_DIR
-
-# Liste des codes departements DVF+
-DEPARTEMENTS = [
-    "01", "02", "03", "04", "05", "06", "07", "08", "09", "10",
-    "11", "12", "13", "14", "15", "16", "17", "18", "19",
-    "21", "22", "23", "24", "25", "26", "27", "28", "29",
-    "2A", "2B",
-    "30", "31", "32", "33", "34", "35", "36", "37", "38", "39",
-    "40", "41", "42", "43", "44", "45", "46", "47", "48", "49",
-    "50", "51", "52", "53", "54", "55", "56", "58", "59",
-    "60", "61", "62", "63", "64", "65", "66",
-    "67", "68",  # Alsace-Moselle: peut etre absent de DVF
-    "69", "70", "71", "72", "73", "74", "75", "76",
-    "77", "78", "79", "80", "81", "82", "83", "84", "85", "86",
-    "87", "88", "89", "90", "91", "92", "93", "94", "95",
-    "971", "972", "973", "974", "976",
-]
+from src.config import LANDING_DIR, ETALAB_BASE_URL, DVF_YEARS, DVF_DEPARTEMENTS
 
 MANIFEST_PATH = LANDING_DIR / "manifest.json"
 
@@ -76,64 +59,83 @@ def download_file(url: str, dest: Path, chunk_size: int = 8192) -> bool:
         return False
 
 
-def download_dvf_plus(
-    base_url: str,
-    dvf_version: str = "2025-04",
-    file_extension: str = ".backup",
+def get_csv_url(year: int, departement: str) -> str:
+    """Construit l'URL de telechargement d'un CSV DVF Etalab."""
+    return f"{ETALAB_BASE_URL}/{year}/departements/{departement}.csv.gz"
+
+
+def download_dvf_etalab(
+    years: list[int] | None = None,
+    departements: list[str] | None = None,
     force: bool = False,
 ):
     """
-    Telecharge les archives DVF+ par departement.
+    Telecharge les CSV DVF geolocalisees depuis Etalab.
 
-    IMPORTANT: Les URLs exactes de Cerema Box ne sont pas stables.
-    Ce script suppose que les fichiers sont accessibles via un pattern d'URL.
-    Si ce n'est pas le cas, telecharger manuellement depuis:
-    https://cerema.box.com/v/dvfplus-opendata
+    Source : https://files.data.gouv.fr/geo-dvf/latest/csv/{YEAR}/departements/{DEPT}.csv.gz
 
     Args:
-        base_url: URL de base pour le telechargement (sans le nom de fichier).
-        dvf_version: Version DVF+ (ex: '2025-04').
-        file_extension: Extension des fichiers (.backup ou .sql.gz).
+        years: Annees a telecharger (defaut: DVF_YEARS).
+        departements: Departements a telecharger (defaut: DVF_DEPARTEMENTS).
         force: Re-telecharger meme si le fichier existe deja.
     """
+    if years is None:
+        years = DVF_YEARS
+    if departements is None:
+        departements = DVF_DEPARTEMENTS
+
     manifest = load_manifest()
     LANDING_DIR.mkdir(parents=True, exist_ok=True)
 
-    for dep in DEPARTEMENTS:
-        filename = f"dvfplus_{dep}{file_extension}"
-        dest = LANDING_DIR / filename
-        url = f"{base_url}/{filename}"
+    total_files = len(years) * len(departements)
+    downloaded = 0
+    skipped = 0
+    errors = 0
 
-        if not force and filename in manifest:
-            existing_checksum = manifest[filename].get("sha256", "")
-            if dest.exists() and existing_checksum:
-                current_checksum = compute_sha256(dest)
-                if current_checksum == existing_checksum:
-                    print(f"[SKIP] {filename} deja a jour")
-                    continue
+    for year in years:
+        year_dir = LANDING_DIR / str(year)
+        year_dir.mkdir(parents=True, exist_ok=True)
 
-        print(f"[DOWNLOAD] {filename}")
-        success = download_file(url, dest)
+        for dep in departements:
+            filename = f"{year}/{dep}.csv.gz"
+            dest = LANDING_DIR / filename
+            url = get_csv_url(year, dep)
 
-        if success:
-            checksum = compute_sha256(dest)
-            manifest[filename] = {
-                "downloaded_at": datetime.now(timezone.utc).isoformat(),
-                "source_url": url,
-                "sha256": checksum,
-                "size_bytes": dest.stat().st_size,
-                "dvf_version": dvf_version,
-            }
-            save_manifest(manifest)
+            if not force and filename in manifest:
+                existing_checksum = manifest[filename].get("sha256", "")
+                if dest.exists() and existing_checksum:
+                    current_checksum = compute_sha256(dest)
+                    if current_checksum == existing_checksum:
+                        print(f"[SKIP] {filename} deja a jour")
+                        skipped += 1
+                        continue
 
-    print(f"\nTelechargement termine. {len(manifest)} fichiers dans le manifest.")
+            print(f"[DOWNLOAD] {filename}")
+            success = download_file(url, dest)
+
+            if success:
+                checksum = compute_sha256(dest)
+                manifest[filename] = {
+                    "downloaded_at": datetime.now(timezone.utc).isoformat(),
+                    "source_url": url,
+                    "sha256": checksum,
+                    "size_bytes": dest.stat().st_size,
+                    "year": year,
+                    "departement": dep,
+                }
+                save_manifest(manifest)
+                downloaded += 1
+            else:
+                errors += 1
+
+    print(f"\nTelechargement termine:")
+    print(f"  Telecharges : {downloaded}/{total_files}")
+    print(f"  Ignores     : {skipped}")
+    print(f"  Erreurs     : {errors}")
 
 
 def list_landing_files() -> list[Path]:
-    """Liste les fichiers DVF+ disponibles dans le landing."""
+    """Liste les fichiers CSV DVF disponibles dans le landing."""
     if not LANDING_DIR.exists():
         return []
-    return sorted(
-        p for p in LANDING_DIR.iterdir()
-        if p.suffix in (".backup", ".gz", ".sql")
-    )
+    return sorted(LANDING_DIR.rglob("*.csv.gz"))

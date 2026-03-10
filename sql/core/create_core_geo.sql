@@ -1,26 +1,3 @@
-CREATE TABLE IF NOT EXISTS core.geo (
-    id                  BIGSERIAL PRIMARY KEY,
-    idmutation          BIGINT NOT NULL,
-
-    -- Geometrie
-    geom                GEOMETRY(Point, 4326),
-    latitude            NUMERIC(10,7),
-    longitude           NUMERIC(10,7),
-
-    -- Administratif
-    coddep              TEXT NOT NULL,
-    codinsee            TEXT NOT NULL,
-
-    -- Adresse
-    codepostal          TEXT,
-    commune             TEXT,
-
-    created_at          TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_core_geo_geom
-    ON core.geo USING GIST (geom);
-CREATE INDEX IF NOT EXISTS idx_core_geo_codinsee
-    ON core.geo (codinsee);
-CREATE INDEX IF NOT EXISTS idx_core_geo_idmutation
-    ON core.geo (idmutation);
+-- Table core.geo supprimee : geometrie integree dans core.transactions
+-- Ce fichier est conserve pour ne pas casser les imports existants
+DROP TABLE IF EXISTS core.geo CASCADE

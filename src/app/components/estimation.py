@@ -70,7 +70,7 @@ def render_estimation(result: EstimationResult):
     if len(result.comparables) > 0:
         with st.expander(f"Transactions comparables ({result.nb_comparables})", expanded=False):
             display_df = result.comparables[
-                ["datemut", "valeurfonc", "surface_utilisee", "nb_pieces", "prix_m2", "libcommune"]
+                ["date_mutation", "valeur_fonciere", "surface", "nb_pieces", "prix_m2", "nom_commune"]
             ].copy()
             display_df.columns = ["Date", "Prix", "Surface", "Pieces", "Prix/m\u00b2", "Commune"]
             display_df["Date"] = display_df["Date"].astype(str)

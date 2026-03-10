@@ -11,8 +11,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.db import check_connection
 from src.ingestion.metadata import init_ingestion_log, log_start, log_finish
-from src.ingestion.restore import restore_all, restore_department
-from src.transform.staging_to_core import run_transform
+from src.ingestion.download import download_dvf_etalab
+from src.ingestion.load_csv import (
+    create_staging_table,
+    load_and_transform,
+    detect_outliers,
+)
+from src.transform.staging_to_core import create_core_tables
 from src.transform.core_to_mart import refresh_marts
 from src.transform.quality import run_quality_checks
 
@@ -34,31 +39,64 @@ def check():
 
 
 @cli.command()
-@click.option("--dep", default=None, help="Code departement (ex: 75). Si absent, restaure tout.")
-def restore(dep):
-    """Restaure les dumps DVF+ dans staging."""
-    init_ingestion_log()
-    run_id = str(uuid.uuid4())[:8]
+def init_db():
+    """Cree les schemas et tables (staging + core + mart)."""
+    from src.db import get_engine
+    from sqlalchemy import text
 
-    if dep:
-        click.echo(f"Restauration du departement {dep}...")
-        log_id = log_start(run_id, "restore", [dep])
-        success = restore_department(dep)
-        log_finish(log_id, "success" if success else "error")
-    else:
-        click.echo("Restauration de tous les departements...")
-        log_id = log_start(run_id, "restore_all")
-        results = restore_all()
-        ok = sum(results.values())
-        total = len(results)
-        log_finish(log_id, "success" if ok == total else "partial", row_count=ok)
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(text("CREATE SCHEMA IF NOT EXISTS staging"))
+        conn.execute(text("CREATE SCHEMA IF NOT EXISTS core"))
+        conn.execute(text("CREATE SCHEMA IF NOT EXISTS mart"))
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
+    click.echo("Schemas crees.")
+
+    create_staging_table()
+    create_core_tables()
+    click.echo("Tables staging + core creees.")
+
+    from src.transform.core_to_mart import create_mart_tables
+    create_mart_tables()
+    click.echo("Tables mart creees.")
+
+    init_ingestion_log()
+    click.echo("Table ingestion_log creee.")
 
 
 @cli.command()
-def transform():
-    """Transforme staging -> core."""
-    click.echo("Transformation staging -> core...")
-    run_transform()
+@click.option("--year", type=int, default=None, help="Annee specifique (ex: 2024).")
+@click.option("--dep", default=None, help="Departement specifique (ex: 75).")
+@click.option("--force", is_flag=True, help="Re-telecharger meme si existant.")
+def download(year, dep, force):
+    """Telecharge les CSV DVF Etalab."""
+    years = [year] if year else None
+    departements = [dep] if dep else None
+    download_dvf_etalab(years=years, departements=departements, force=force)
+
+
+@cli.command()
+@click.option("--year", type=int, default=None, help="Annee specifique (ex: 2024).")
+@click.option("--dep", default=None, help="Departement specifique (ex: 75).")
+def load(year, dep):
+    """Charge les CSV dans staging puis transforme vers core."""
+    years = [year] if year else None
+    departements = [dep] if dep else None
+
+    init_ingestion_log()
+    run_id = str(uuid.uuid4())[:8]
+    log_id = log_start(run_id, "load_and_transform")
+
+    create_core_tables()
+    load_and_transform(years=years, departements=departements)
+
+    log_finish(log_id, "success")
+
+
+@cli.command()
+def outliers():
+    """Detecte les outliers dans core.transactions."""
+    detect_outliers()
 
 
 @cli.command()
@@ -76,31 +114,49 @@ def quality():
 
 
 @cli.command()
-@click.option("--dep", default=None, help="Departement pilote (ex: 75). Si absent, tout le pipeline.")
-def all(dep):
-    """Execute le pipeline complet : restore -> transform -> mart -> quality."""
+@click.option("--year", type=int, default=None, help="Annee specifique.")
+@click.option("--dep", default=None, help="Departement specifique.")
+def run_all(year, dep):
+    """Execute le pipeline complet : init -> download -> load -> outliers -> mart -> quality."""
     run_id = str(uuid.uuid4())[:8]
-    init_ingestion_log()
 
-    # Etape 1 : Restore
-    click.echo("\n=== ETAPE 1 : Restauration ===")
+    # Etape 0 : Init DB
+    click.echo("\n=== ETAPE 0 : Initialisation DB ===")
+    from src.db import get_engine
+    from sqlalchemy import text
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(text("CREATE SCHEMA IF NOT EXISTS staging"))
+        conn.execute(text("CREATE SCHEMA IF NOT EXISTS core"))
+        conn.execute(text("CREATE SCHEMA IF NOT EXISTS mart"))
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
+
+    init_ingestion_log()
     log_id = log_start(run_id, "full_pipeline")
 
-    if dep:
-        restore_department(dep)
-    else:
-        restore_all()
+    create_staging_table()
+    create_core_tables()
 
-    # Etape 2 : Transform
-    click.echo("\n=== ETAPE 2 : Transformation ===")
-    run_transform()
+    # Etape 1 : Download
+    click.echo("\n=== ETAPE 1 : Telechargement ===")
+    years = [year] if year else None
+    departements = [dep] if dep else None
+    download_dvf_etalab(years=years, departements=departements)
 
-    # Etape 3 : Mart
-    click.echo("\n=== ETAPE 3 : Marts ===")
+    # Etape 2 : Load + Transform
+    click.echo("\n=== ETAPE 2 : Chargement + Transformation ===")
+    load_and_transform(years=years, departements=departements)
+
+    # Etape 3 : Outliers
+    click.echo("\n=== ETAPE 3 : Detection outliers ===")
+    detect_outliers()
+
+    # Etape 4 : Mart
+    click.echo("\n=== ETAPE 4 : Marts ===")
     refresh_marts()
 
-    # Etape 4 : Quality
-    click.echo("\n=== ETAPE 4 : Qualite ===")
+    # Etape 5 : Quality
+    click.echo("\n=== ETAPE 5 : Qualite ===")
     run_quality_checks()
 
     log_finish(log_id, "success")

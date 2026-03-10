@@ -1,65 +1,48 @@
-CREATE TABLE IF NOT EXISTS core.transactions (
+CREATE SCHEMA IF NOT EXISTS core;
+
+DROP TABLE IF EXISTS core.transactions CASCADE;
+
+CREATE TABLE core.transactions (
     id                  BIGSERIAL PRIMARY KEY,
-    idmutation          BIGINT NOT NULL,
-    idmutinvar          TEXT,
+    id_mutation         TEXT NOT NULL,
+    date_mutation       DATE NOT NULL,
+    annee               INTEGER NOT NULL,
+    mois                INTEGER NOT NULL,
+    valeur_fonciere     NUMERIC(15,2) NOT NULL,
 
-    -- Transaction
-    datemut             DATE NOT NULL,
-    anneemut            INTEGER NOT NULL,
-    moismut             INTEGER NOT NULL,
-    valeurfonc          NUMERIC(15,2) NOT NULL,
-
-    -- Type de bien
-    codtypbien          TEXT NOT NULL,
-    libtypbien          TEXT,
+    -- Type simplifie
     type_bien           TEXT NOT NULL,
 
-    -- Surfaces
-    sbati               NUMERIC(10,2),
-    sbatmai             NUMERIC(10,2),
-    sbatapt             NUMERIC(10,2),
-    surface_utilisee    NUMERIC(10,2) NOT NULL,
-    sterr               NUMERIC(12,2),
-
-    -- Pieces
-    nbppmut             INTEGER,
+    -- Surface et pieces
+    surface             NUMERIC(10,2) NOT NULL,
     nb_pieces           INTEGER,
 
-    -- Comptages
-    nblocmut            INTEGER,
-    nblocmai            INTEGER,
-    nblocapt            INTEGER,
-
     -- Geographie
-    coddep              TEXT NOT NULL,
-    codinsee            TEXT NOT NULL,
-    libcommune          TEXT,
+    code_departement    TEXT NOT NULL,
+    code_commune        TEXT NOT NULL,
+    nom_commune         TEXT,
+    code_postal         TEXT,
+    adresse             TEXT,
+
+    -- Coordonnees
+    latitude            NUMERIC(10,7),
+    longitude           NUMERIC(10,7),
+    geom                GEOMETRY(Point, 4326),
 
     -- Calcule
     prix_m2             NUMERIC(10,2) NOT NULL,
 
     -- Qualite
-    filtre              TEXT,
-    quality_score       INTEGER DEFAULT 0,
+    is_outlier          BOOLEAN DEFAULT FALSE,
 
-    -- Metadata
-    dvf_version         TEXT,
-    created_at          TIMESTAMPTZ DEFAULT NOW(),
-
-    CONSTRAINT chk_prix_m2_positive CHECK (prix_m2 > 0),
-    CONSTRAINT chk_surface_positive CHECK (surface_utilisee > 0),
-    CONSTRAINT chk_valeur_positive CHECK (valeurfonc > 0)
+    CONSTRAINT chk_prix_m2_pos CHECK (prix_m2 > 0),
+    CONSTRAINT chk_surface_pos CHECK (surface > 0),
+    CONSTRAINT chk_valeur_pos CHECK (valeur_fonciere > 0)
 );
 
-CREATE INDEX IF NOT EXISTS idx_core_tx_codinsee_type
-    ON core.transactions (codinsee, type_bien);
-CREATE INDEX IF NOT EXISTS idx_core_tx_coddep_type
-    ON core.transactions (coddep, type_bien);
-CREATE INDEX IF NOT EXISTS idx_core_tx_annee_mois
-    ON core.transactions (anneemut, moismut);
-CREATE INDEX IF NOT EXISTS idx_core_tx_prix_m2
-    ON core.transactions (prix_m2);
-CREATE INDEX IF NOT EXISTS idx_core_tx_datemut
-    ON core.transactions (datemut);
-CREATE INDEX IF NOT EXISTS idx_core_tx_quality
-    ON core.transactions (quality_score);
+CREATE INDEX IF NOT EXISTS idx_tx_commune_type ON core.transactions (code_commune, type_bien);
+CREATE INDEX IF NOT EXISTS idx_tx_dept_type ON core.transactions (code_departement, type_bien);
+CREATE INDEX IF NOT EXISTS idx_tx_date ON core.transactions (date_mutation);
+CREATE INDEX IF NOT EXISTS idx_tx_prix_m2 ON core.transactions (prix_m2);
+CREATE INDEX IF NOT EXISTS idx_tx_geom ON core.transactions USING GIST (geom);
+CREATE INDEX IF NOT EXISTS idx_tx_not_outlier ON core.transactions (is_outlier) WHERE NOT is_outlier

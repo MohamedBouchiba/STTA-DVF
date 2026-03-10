@@ -1,4 +1,4 @@
-"""Connexion SQLAlchemy a PostgreSQL/PostGIS."""
+"""Connexion SQLAlchemy a PostgreSQL/PostGIS (Supabase)."""
 
 from contextlib import contextmanager
 from pathlib import Path
@@ -16,13 +16,23 @@ def get_engine():
     """Retourne un engine SQLAlchemy (singleton)."""
     global _engine
     if _engine is None:
+        connect_args = {}
+        if "supabase.co" in DATABASE_URL:
+            connect_args["sslmode"] = "require"
         _engine = create_engine(
             DATABASE_URL,
             pool_size=5,
             max_overflow=10,
             pool_pre_ping=True,
+            connect_args=connect_args,
         )
     return _engine
+
+
+def get_raw_connection():
+    """Retourne une connexion psycopg2 brute (pour COPY CSV)."""
+    engine = get_engine()
+    return engine.raw_connection()
 
 
 @contextmanager

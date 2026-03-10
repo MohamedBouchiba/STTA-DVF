@@ -9,7 +9,7 @@ from src.estimation.estimator import EstimationResult
 from src.app.utils.formatting import format_price_m2, format_percentage
 
 
-def _get_historical_data(codinsee: str, coddep: str, type_bien: str) -> pd.DataFrame:
+def _get_historical_data(code_commune: str, code_departement: str, type_bien: str) -> pd.DataFrame:
     """Recupere l'historique des medianes par semestre."""
     engine = get_engine()
 
@@ -17,22 +17,22 @@ def _get_historical_data(codinsee: str, coddep: str, type_bien: str) -> pd.DataF
     query = text("""
         SELECT annee, semestre, nb_transactions, median_prix_m2,
                q1_prix_m2, q3_prix_m2
-        FROM mart.prix_m2_commune
-        WHERE codinsee = :codinsee AND type_bien = :type_bien
+        FROM mart.stats_commune
+        WHERE code_commune = :code_commune AND type_bien = :type_bien
         ORDER BY annee, semestre
     """)
-    df = pd.read_sql(query, engine, params={"codinsee": codinsee, "type_bien": type_bien})
+    df = pd.read_sql(query, engine, params={"code_commune": code_commune, "type_bien": type_bien})
 
     if len(df) < 2:
         # Fallback departement
         query = text("""
             SELECT annee, semestre, nb_transactions, median_prix_m2,
                    q1_prix_m2, q3_prix_m2
-            FROM mart.prix_m2_departement
-            WHERE coddep = :coddep AND type_bien = :type_bien
+            FROM mart.stats_departement
+            WHERE code_departement = :code_departement AND type_bien = :type_bien
             ORDER BY annee, semestre
         """)
-        df = pd.read_sql(query, engine, params={"coddep": coddep, "type_bien": type_bien})
+        df = pd.read_sql(query, engine, params={"code_departement": code_departement, "type_bien": type_bien})
         if len(df) > 0:
             df["source"] = "departement"
         return df
@@ -48,12 +48,12 @@ def render_stats_panel(result: EstimationResult):
 
     st.subheader("Statistiques du marche local")
 
-    codinsee = result.geocoding.citycode
-    coddep = codinsee[:2] if len(codinsee) >= 2 else codinsee
+    code_commune = result.geocoding.citycode
+    code_departement = code_commune[:2] if len(code_commune) >= 2 else code_commune
     type_bien = result.comparables["type_bien"].iloc[0] if len(result.comparables) > 0 else "appartement"
 
     # Historique
-    hist = _get_historical_data(codinsee, coddep, type_bien)
+    hist = _get_historical_data(code_commune, code_departement, type_bien)
 
     if len(hist) > 0:
         # Graphique d'evolution

@@ -54,7 +54,9 @@ def _compute_surface_adjustment(user_surface: float, comparables: pd.DataFrame) 
     if len(comparables) == 0:
         return 1.0
 
-    median_surface = float(comparables["surface_utilisee"].median())
+    # Colonne surface (compatible ancien et nouveau schema)
+    surface_col = "surface" if "surface" in comparables.columns else "surface_utilisee"
+    median_surface = float(comparables[surface_col].median())
     if median_surface <= 0:
         return 1.0
 
@@ -67,7 +69,7 @@ def _compute_surface_adjustment(user_surface: float, comparables: pd.DataFrame) 
     return max(0.8, min(1.2, adjustment))
 
 
-def _get_zone_stats(codinsee: str, type_bien: str) -> dict | None:
+def _get_zone_stats(code_commune: str, type_bien: str) -> dict | None:
     """Recupere les statistiques de zone depuis mart."""
     engine = get_engine()
     try:
@@ -76,10 +78,10 @@ def _get_zone_stats(codinsee: str, type_bien: str) -> dict | None:
                    median_prix_m2_12m, stddev_prix_m2_12m,
                    trend_12m, data_quality_flag
             FROM mart.zone_stats
-            WHERE codinsee = :codinsee AND type_bien = :type_bien
+            WHERE code_commune = :code_commune AND type_bien = :type_bien
         """)
         with engine.connect() as conn:
-            result = conn.execute(query, {"codinsee": codinsee, "type_bien": type_bien})
+            result = conn.execute(query, {"code_commune": code_commune, "type_bien": type_bien})
             row = result.fetchone()
             if row:
                 return {
@@ -95,29 +97,29 @@ def _get_zone_stats(codinsee: str, type_bien: str) -> dict | None:
     return None
 
 
-def _get_historical_stats(codinsee: str, coddep: str, type_bien: str) -> pd.DataFrame:
+def _get_historical_stats(code_commune: str, code_departement: str, type_bien: str) -> pd.DataFrame:
     """Recupere l'historique des medianes par semestre."""
     engine = get_engine()
     # D'abord essayer au niveau commune
     query = text("""
         SELECT annee, semestre, nb_transactions, median_prix_m2,
                q1_prix_m2, q3_prix_m2
-        FROM mart.prix_m2_commune
-        WHERE codinsee = :codinsee AND type_bien = :type_bien
+        FROM mart.stats_commune
+        WHERE code_commune = :code_commune AND type_bien = :type_bien
         ORDER BY annee, semestre
     """)
-    df = pd.read_sql(query, engine, params={"codinsee": codinsee, "type_bien": type_bien})
+    df = pd.read_sql(query, engine, params={"code_commune": code_commune, "type_bien": type_bien})
 
     if len(df) == 0:
         # Fallback departement
         query = text("""
             SELECT annee, semestre, nb_transactions, median_prix_m2,
                    q1_prix_m2, q3_prix_m2
-            FROM mart.prix_m2_departement
-            WHERE coddep = :coddep AND type_bien = :type_bien
+            FROM mart.stats_departement
+            WHERE code_departement = :code_departement AND type_bien = :type_bien
             ORDER BY annee, semestre
         """)
-        df = pd.read_sql(query, engine, params={"coddep": coddep, "type_bien": type_bien})
+        df = pd.read_sql(query, engine, params={"code_departement": code_departement, "type_bien": type_bien})
 
     return df
 
@@ -151,7 +153,7 @@ def estimate(
     search = find_comparables(
         latitude=geo.latitude,
         longitude=geo.longitude,
-        codinsee=geo.citycode,
+        code_commune=geo.citycode,
         type_bien=type_bien,
         surface=surface,
         nb_pieces=nb_pieces,
@@ -159,7 +161,6 @@ def estimate(
     comparables = search.comparables
 
     if len(comparables) == 0:
-        # Aucun comparable, estimation impossible
         return EstimationResult(
             geocoding=geo,
             prix_m2_estime=0,
@@ -188,8 +189,6 @@ def estimate(
 
     # Etape 5 : Correction tendance (si disponible)
     zone_stats = _get_zone_stats(geo.citycode, type_bien)
-    # La correction tendance est deja refletee dans les comparables recents,
-    # donc on ne l'applique pas en double. Elle sert pour l'affichage.
 
     # Etape 6 : Prix total
     prix_total = adjusted_prix_m2 * surface

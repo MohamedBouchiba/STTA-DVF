@@ -1,172 +1,89 @@
 -- ============================================================
--- Transformation staging -> core
--- Filtre, nettoie et calcule prix/m2 depuis DVF+
+-- Transformation staging.dvf (Etalab CSV) -> core.transactions
+-- Le CSV a 1 ligne par lot/local. On agregre par id_mutation
+-- pour ne garder que les ventes mono-bien residentielles.
 -- ============================================================
 
-TRUNCATE core.transactions CASCADE;
-TRUNCATE core.geo CASCADE;
+-- IMPORTANT : on n'utilise PAS TRUNCATE core.transactions ici
+-- car le chargement se fait par lot (1 CSV a la fois).
+-- Le TRUNCATE est fait une seule fois au debut du pipeline complet.
 
 -- ============================================================
--- ETAPE 1 : Transactions nettoyees
+-- ETAPE 1 : Inserer les ventes mono-bien depuis le staging courant
 -- ============================================================
 INSERT INTO core.transactions (
-    idmutation, idmutinvar, datemut, anneemut, moismut,
-    valeurfonc, codtypbien, libtypbien, type_bien,
-    sbati, sbatmai, sbatapt, surface_utilisee, sterr,
-    nbppmut, nb_pieces, nblocmut, nblocmai, nblocapt,
-    coddep, codinsee, libcommune, prix_m2, filtre, dvf_version
+    id_mutation, date_mutation, annee, mois,
+    valeur_fonciere, type_bien,
+    surface, nb_pieces,
+    code_departement, code_commune, nom_commune, code_postal, adresse,
+    latitude, longitude, geom,
+    prix_m2
 )
-SELECT
-    m.idmutation,
-    m.idmutinvar,
-    m.datemut,
-    m.anneemut,
-    m.moismut,
-    m.valeurfonc,
-    m.codtypbien,
-    m.libtypbien,
-
-    -- Type simplifie
-    CASE
-        WHEN m.codtypbien LIKE '111%' THEN 'maison'
-        WHEN m.codtypbien LIKE '121%' THEN 'appartement'
-    END AS type_bien,
-
-    m.sbati,
-    m.sbatmai,
-    m.sbatapt,
-
-    -- Surface pour le calcul prix/m2
-    CASE
-        WHEN m.codtypbien LIKE '121%' AND m.sbatapt > 0 THEN m.sbatapt
-        WHEN m.codtypbien LIKE '111%' AND m.sbatmai > 0 THEN m.sbatmai
-        ELSE m.sbati
-    END AS surface_utilisee,
-
-    m.sterr,
-
-    -- Nombre de pieces principal
-    m.nbppmut,
-
-    -- Nb pieces simplifie (pour mutations mono-bien)
-    CASE
-        WHEN m.codtypbien LIKE '121%' THEN
-            CASE
-                WHEN m.nbapt1pp = 1 THEN 1
-                WHEN m.nbapt2pp = 1 THEN 2
-                WHEN m.nbapt3pp = 1 THEN 3
-                WHEN m.nbapt4pp = 1 THEN 4
-                WHEN m.nbapt5pp = 1 THEN 5
-            END
-        WHEN m.codtypbien LIKE '111%' THEN
-            CASE
-                WHEN m.nbmai1pp = 1 THEN 1
-                WHEN m.nbmai2pp = 1 THEN 2
-                WHEN m.nbmai3pp = 1 THEN 3
-                WHEN m.nbmai4pp = 1 THEN 4
-                WHEN m.nbmai5pp = 1 THEN 5
-            END
-    END AS nb_pieces,
-
-    m.nblocmut,
-    m.nblocmai,
-    m.nblocapt,
-    m.coddep,
-
-    -- Premier code INSEE de la liste
-    (string_to_array(m.l_codinsee, '|'))[1] AS codinsee,
-
-    -- Libelle commune
-    (string_to_array(m.l_libcom, '|'))[1] AS libcommune,
-
-    -- Prix au m2
-    m.valeurfonc / NULLIF(
-        CASE
-            WHEN m.codtypbien LIKE '121%' AND m.sbatapt > 0 THEN m.sbatapt
-            WHEN m.codtypbien LIKE '111%' AND m.sbatmai > 0 THEN m.sbatmai
-            ELSE m.sbati
-        END, 0
-    ) AS prix_m2,
-
-    m.filtre,
-    'current' AS dvf_version
-
-FROM staging.mutation m
-WHERE
-    -- Ventes uniquement
-    m.libnatmut = 'Vente'
-
-    -- Types residentiels mono-bien
-    AND (m.codtypbien LIKE '111%' OR m.codtypbien LIKE '121%')
-
-    -- Prix valide
-    AND m.valeurfonc > 0
-
-    -- Surface valide
-    AND CASE
-        WHEN m.codtypbien LIKE '121%' THEN COALESCE(m.sbatapt, m.sbati)
-        WHEN m.codtypbien LIKE '111%' THEN COALESCE(m.sbatmai, m.sbati)
-    END > 0
-
-    -- Surface minimum 9m2
-    AND CASE
-        WHEN m.codtypbien LIKE '121%' THEN COALESCE(m.sbatapt, m.sbati)
-        WHEN m.codtypbien LIKE '111%' THEN COALESCE(m.sbatmai, m.sbati)
-    END >= 9
-
-    -- Mutations mono-bien (prix/m2 fiable)
-    AND (
-        (m.codtypbien LIKE '111%' AND m.nblocmai = 1)
-        OR (m.codtypbien LIKE '121%' AND m.nblocapt = 1)
-    )
-
-    -- Filtre DVF+ (exclut transactions a 0/1 EUR)
-    AND (m.filtre IS NULL OR m.filtre NOT IN ('0', '1'))
-;
-
--- ============================================================
--- ETAPE 2 : Donnees geographiques
--- ============================================================
-INSERT INTO core.geo (
-    idmutation, geom, latitude, longitude,
-    coddep, codinsee, commune
-)
-SELECT
-    t.idmutation,
-    m.geomlocmut,
-    ST_Y(m.geomlocmut::geometry),
-    ST_X(m.geomlocmut::geometry),
-    t.coddep,
-    t.codinsee,
-    t.libcommune
-FROM core.transactions t
-JOIN staging.mutation m ON m.idmutation = t.idmutation
-WHERE m.geomlocmut IS NOT NULL;
-
--- ============================================================
--- ETAPE 3 : Detection des outliers (IQR par dep x type x annee)
--- ============================================================
-WITH quartiles AS (
+WITH lots_residentiels AS (
+    -- Filtrer aux ventes de maisons/appartements avec surface valide
     SELECT
-        coddep,
-        type_bien,
-        anneemut,
-        PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY prix_m2) AS q1,
-        PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY prix_m2) AS q3
-    FROM core.transactions
-    GROUP BY coddep, type_bien, anneemut
+        id_mutation,
+        date_mutation,
+        valeur_fonciere,
+        code_type_local,
+        type_local,
+        surface_reelle_bati,
+        nombre_pieces_principales,
+        code_departement,
+        code_commune,
+        nom_commune,
+        code_postal,
+        adresse_numero,
+        adresse_nom_voie,
+        latitude,
+        longitude
+    FROM staging.dvf
+    WHERE nature_mutation = 'Vente'
+      AND code_type_local IN (1, 2)
+      AND valeur_fonciere > 0
+      AND surface_reelle_bati IS NOT NULL
+      AND surface_reelle_bati >= 9
 ),
-bounds AS (
+mutations_comptees AS (
+    -- Compter le nombre de locaux residentiels par mutation
     SELECT
-        coddep, type_bien, anneemut,
-        q1 - 1.5 * (q3 - q1) AS lower_bound,
-        q3 + 1.5 * (q3 - q1) AS upper_bound
-    FROM quartiles
+        id_mutation,
+        COUNT(*) AS nb_locaux
+    FROM lots_residentiels
+    GROUP BY id_mutation
+),
+mono_bien AS (
+    -- Ne garder que les mutations avec exactement 1 local residentiel
+    SELECT l.*
+    FROM lots_residentiels l
+    JOIN mutations_comptees m ON m.id_mutation = l.id_mutation
+    WHERE m.nb_locaux = 1
 )
-UPDATE core.transactions t
-SET quality_score = quality_score | 1
-FROM bounds b
-WHERE t.coddep = b.coddep
-  AND t.type_bien = b.type_bien
-  AND t.anneemut = b.anneemut
-  AND (t.prix_m2 < b.lower_bound OR t.prix_m2 > b.upper_bound);
+SELECT
+    id_mutation,
+    date_mutation,
+    EXTRACT(YEAR FROM date_mutation)::INTEGER AS annee,
+    EXTRACT(MONTH FROM date_mutation)::INTEGER AS mois,
+    valeur_fonciere,
+    CASE code_type_local
+        WHEN 1 THEN 'maison'
+        WHEN 2 THEN 'appartement'
+    END AS type_bien,
+    surface_reelle_bati AS surface,
+    nombre_pieces_principales AS nb_pieces,
+    code_departement,
+    code_commune,
+    nom_commune,
+    code_postal,
+    TRIM(COALESCE(adresse_numero, '') || ' ' || COALESCE(adresse_nom_voie, '')) AS adresse,
+    latitude,
+    longitude,
+    CASE
+        WHEN latitude IS NOT NULL AND longitude IS NOT NULL
+        THEN ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)
+    END AS geom,
+    valeur_fonciere / surface_reelle_bati AS prix_m2
+FROM mono_bien
+WHERE valeur_fonciere / surface_reelle_bati > 0
+  -- Eviter les doublons si le meme CSV est charge deux fois
+  AND id_mutation NOT IN (SELECT DISTINCT id_mutation FROM core.transactions)

@@ -42,10 +42,10 @@ def render_map(result: EstimationResult):
                     color = "blue"
 
                 popup_text = (
-                    f"<b>{row.get('libcommune', '')}</b><br>"
-                    f"Date: {row['datemut']}<br>"
-                    f"Prix: {row['valeurfonc']:,.0f} EUR<br>"
-                    f"Surface: {row['surface_utilisee']:.0f} m\u00b2<br>"
+                    f"<b>{row.get('nom_commune', '')}</b><br>"
+                    f"Date: {row['date_mutation']}<br>"
+                    f"Prix: {row['valeur_fonciere']:,.0f} EUR<br>"
+                    f"Surface: {row['surface']:.0f} m\u00b2<br>"
                     f"Prix/m\u00b2: {row['prix_m2']:,.0f} EUR"
                 )
 

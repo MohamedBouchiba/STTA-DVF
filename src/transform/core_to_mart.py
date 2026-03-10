@@ -46,7 +46,6 @@ def refresh_marts():
         statements.append("\n".join(current))
 
     for block in statements:
-        # Executer chaque sous-statement du bloc
         for stmt in block.split(";"):
             stmt = stmt.strip()
             if stmt and not stmt.startswith("--"):
@@ -56,14 +55,14 @@ def refresh_marts():
 
     # Comptages
     with engine.connect() as conn:
-        commune = conn.execute(text("SELECT COUNT(*) FROM mart.prix_m2_commune")).scalar()
-        dep = conn.execute(text("SELECT COUNT(*) FROM mart.prix_m2_departement")).scalar()
+        commune = conn.execute(text("SELECT COUNT(*) FROM mart.stats_commune")).scalar()
+        dep = conn.execute(text("SELECT COUNT(*) FROM mart.stats_departement")).scalar()
         zones = conn.execute(text("SELECT COUNT(*) FROM mart.zone_stats")).scalar()
         indices = conn.execute(text("SELECT COUNT(*) FROM mart.indices_temporels")).scalar()
 
     print(f"\n=== Marts rafraichis ===")
-    print(f"  prix_m2_commune     : {commune:,} lignes")
-    print(f"  prix_m2_departement : {dep:,} lignes")
+    print(f"  stats_commune       : {commune:,} lignes")
+    print(f"  stats_departement   : {dep:,} lignes")
     print(f"  zone_stats          : {zones:,} lignes")
     print(f"  indices_temporels   : {indices:,} lignes")
 

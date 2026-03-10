@@ -14,8 +14,8 @@ class ComparableSearch:
     """Parametres et resultats d'une recherche de comparables."""
     latitude: float
     longitude: float
-    codinsee: str
-    coddep: str
+    code_commune: str
+    code_departement: str
     type_bien: str
     surface: float | None
     nb_pieces: int | None
@@ -27,7 +27,7 @@ class ComparableSearch:
 def find_comparables(
     latitude: float,
     longitude: float,
-    codinsee: str,
+    code_commune: str,
     type_bien: str,
     surface: float | None = None,
     nb_pieces: int | None = None,
@@ -45,7 +45,7 @@ def find_comparables(
     Args:
         latitude: Latitude du bien.
         longitude: Longitude du bien.
-        codinsee: Code INSEE de la commune.
+        code_commune: Code INSEE de la commune.
         type_bien: 'maison' ou 'appartement'.
         surface: Surface du bien (pour filtrer les comparables proches).
         nb_pieces: Nombre de pieces (optionnel).
@@ -58,58 +58,58 @@ def find_comparables(
         min_comparables = MIN_COMPARABLES
 
     engine = get_engine()
-    coddep = codinsee[:2] if len(codinsee) >= 2 else codinsee
+    code_departement = code_commune[:2] if len(code_commune) >= 2 else code_commune
 
-    # Colonnes a selectionner
+    # Colonnes a selectionner (geo integre dans core.transactions)
     cols = """
-        t.idmutation, t.datemut, t.valeurfonc, t.type_bien,
-        t.surface_utilisee, t.nb_pieces, t.prix_m2,
-        t.codinsee, t.libcommune, t.coddep,
-        g.latitude, g.longitude
+        t.id_mutation, t.date_mutation, t.valeur_fonciere, t.type_bien,
+        t.surface, t.nb_pieces, t.prix_m2,
+        t.code_commune, t.nom_commune, t.code_departement,
+        t.latitude, t.longitude
     """
 
     # Filtres optionnels de surface
     surface_filter = ""
     if surface:
-        surface_filter = f"AND t.surface_utilisee BETWEEN {surface * 0.5} AND {surface * 2.0}"
+        surface_filter = f"AND t.surface BETWEEN {surface * 0.5} AND {surface * 2.0}"
 
     # Niveaux de recherche
     levels = [
         {
             "level": 1,
             "desc": "1 km, 24 derniers mois",
-            "where": f"""
-                g.geom IS NOT NULL
+            "where": """
+                t.geom IS NOT NULL
                 AND ST_DWithin(
-                    g.geom::geography,
+                    t.geom::geography,
                     ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography,
                     1000
                 )
-                AND t.datemut >= CURRENT_DATE - INTERVAL '24 months'
+                AND t.date_mutation >= CURRENT_DATE - INTERVAL '24 months'
             """,
         },
         {
             "level": 2,
             "desc": "commune, 24 derniers mois",
             "where": """
-                t.codinsee = :codinsee
-                AND t.datemut >= CURRENT_DATE - INTERVAL '24 months'
+                t.code_commune = :code_commune
+                AND t.date_mutation >= CURRENT_DATE - INTERVAL '24 months'
             """,
         },
         {
             "level": 3,
             "desc": "commune, 48 derniers mois",
             "where": """
-                t.codinsee = :codinsee
-                AND t.datemut >= CURRENT_DATE - INTERVAL '48 months'
+                t.code_commune = :code_commune
+                AND t.date_mutation >= CURRENT_DATE - INTERVAL '48 months'
             """,
         },
         {
             "level": 4,
             "desc": "departement, 24 derniers mois",
             "where": """
-                t.coddep = :coddep
-                AND t.datemut >= CURRENT_DATE - INTERVAL '24 months'
+                t.code_departement = :code_departement
+                AND t.date_mutation >= CURRENT_DATE - INTERVAL '24 months'
             """,
         },
     ]
@@ -117,21 +117,22 @@ def find_comparables(
     params = {
         "lat": latitude,
         "lon": longitude,
-        "codinsee": codinsee,
-        "coddep": coddep,
+        "code_commune": code_commune,
+        "code_departement": code_departement,
         "type_bien": type_bien,
     }
+
+    df = pd.DataFrame()
 
     for lvl in levels:
         query = f"""
             SELECT {cols}
             FROM core.transactions t
-            JOIN core.geo g ON g.idmutation = t.idmutation
             WHERE t.type_bien = :type_bien
-              AND t.quality_score & 1 = 0
+              AND NOT t.is_outlier
               AND {lvl['where']}
               {surface_filter}
-            ORDER BY t.datemut DESC
+            ORDER BY t.date_mutation DESC
             LIMIT 500
         """
 
@@ -141,8 +142,8 @@ def find_comparables(
             return ComparableSearch(
                 latitude=latitude,
                 longitude=longitude,
-                codinsee=codinsee,
-                coddep=coddep,
+                code_commune=code_commune,
+                code_departement=code_departement,
                 type_bien=type_bien,
                 surface=surface,
                 nb_pieces=nb_pieces,
@@ -155,8 +156,8 @@ def find_comparables(
     return ComparableSearch(
         latitude=latitude,
         longitude=longitude,
-        codinsee=codinsee,
-        coddep=coddep,
+        code_commune=code_commune,
+        code_departement=code_departement,
         type_bien=type_bien,
         surface=surface,
         nb_pieces=nb_pieces,

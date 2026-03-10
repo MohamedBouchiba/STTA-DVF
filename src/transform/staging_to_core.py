@@ -1,7 +1,5 @@
 """Transformation staging -> core."""
 
-from pathlib import Path
-
 from sqlalchemy import text
 
 from src.config import SQL_DIR
@@ -23,14 +21,18 @@ def create_core_tables():
 
 
 def run_transform():
-    """Execute la transformation staging -> core."""
+    """Execute la transformation staging -> core (hors chargement CSV).
+
+    Note: En mode normal, utiliser load_csv.load_and_transform() qui
+    gere le cycle complet (truncate staging -> load -> transform -> truncate).
+    Cette fonction est utile pour re-transformer des donnees deja en staging.
+    """
     create_core_tables()
 
     engine = get_engine()
     sql_path = SQL_DIR / "core" / "transform_staging_to_core.sql"
     sql = sql_path.read_text(encoding="utf-8")
 
-    # Executer chaque statement separement
     with engine.begin() as conn:
         for stmt in sql.split(";"):
             stmt = stmt.strip()
@@ -42,16 +44,18 @@ def run_transform():
     with engine.connect() as conn:
         total = conn.execute(text("SELECT COUNT(*) FROM core.transactions")).scalar()
         clean = conn.execute(
-            text("SELECT COUNT(*) FROM core.transactions WHERE quality_score & 1 = 0")
+            text("SELECT COUNT(*) FROM core.transactions WHERE NOT is_outlier")
         ).scalar()
-        geo = conn.execute(text("SELECT COUNT(*) FROM core.geo")).scalar()
+        geolocated = conn.execute(
+            text("SELECT COUNT(*) FROM core.transactions WHERE geom IS NOT NULL")
+        ).scalar()
         outliers = total - clean
 
     print(f"\n=== Transformation terminee ===")
     print(f"  Transactions totales : {total:,}")
     print(f"  Transactions propres : {clean:,}")
     print(f"  Outliers detectes    : {outliers:,} ({100*outliers/max(total,1):.1f}%)")
-    print(f"  Geolocalisees        : {geo:,}")
+    print(f"  Geolocalisees        : {geolocated:,}")
 
 
 if __name__ == "__main__":

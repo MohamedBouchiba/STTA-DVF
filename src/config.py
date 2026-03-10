@@ -8,17 +8,17 @@ from dotenv import load_dotenv
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
 
-# Base de donnees
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://dvf_user:dvf_secret@localhost:5433/dvf")
-POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
-POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", "5433"))
-POSTGRES_DB = os.getenv("POSTGRES_DB", "dvf")
-POSTGRES_USER = os.getenv("POSTGRES_USER", "dvf_user")
-POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "dvf_secret")
+# Base de donnees (Supabase)
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:password@localhost:5432/postgres")
 
 # Chemins
 LANDING_DIR = PROJECT_ROOT / os.getenv("LANDING_DIR", "data/landing")
 SQL_DIR = PROJECT_ROOT / "sql"
+
+# Source DVF Etalab
+ETALAB_BASE_URL = "https://files.data.gouv.fr/geo-dvf/latest/csv"
+DVF_YEARS = [2019, 2020, 2021, 2022, 2023, 2024]
+DVF_DEPARTEMENTS = ["13", "75", "77", "78", "91", "92", "93", "94", "95"]
 
 # Geocodage
 GEOCODING_API_URL = os.getenv("GEOCODING_API_URL", "https://data.geopf.fr/geocodage/search")

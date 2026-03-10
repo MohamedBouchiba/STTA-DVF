@@ -15,20 +15,20 @@ class TestSurfaceAdjustment:
 
     def test_same_surface_no_adjustment(self, sample_comparables):
         """Si la surface = mediane des comparables, ajustement = 1."""
-        median_surface = sample_comparables["surface_utilisee"].median()
+        median_surface = sample_comparables["surface"].median()
         adj = _compute_surface_adjustment(median_surface, sample_comparables)
         assert adj == pytest.approx(1.0, abs=0.01)
 
     def test_double_surface_reduces_price(self, sample_comparables):
         """Doubler la surface reduit le prix/m2."""
-        median_surface = sample_comparables["surface_utilisee"].median()
+        median_surface = sample_comparables["surface"].median()
         adj = _compute_surface_adjustment(median_surface * 2, sample_comparables)
         assert adj < 1.0
         assert adj == pytest.approx(0.9, abs=0.05)
 
     def test_half_surface_increases_price(self, sample_comparables):
         """Diviser la surface par 2 augmente le prix/m2."""
-        median_surface = sample_comparables["surface_utilisee"].median()
+        median_surface = sample_comparables["surface"].median()
         adj = _compute_surface_adjustment(median_surface / 2, sample_comparables)
         assert adj > 1.0
         assert adj == pytest.approx(1.1, abs=0.05)
@@ -42,7 +42,7 @@ class TestSurfaceAdjustment:
 
     def test_empty_comparables(self):
         """Pas de comparables -> ajustement = 1."""
-        empty_df = pd.DataFrame(columns=["surface_utilisee"])
+        empty_df = pd.DataFrame(columns=["surface"])
         adj = _compute_surface_adjustment(50.0, empty_df)
         assert adj == 1.0
 
