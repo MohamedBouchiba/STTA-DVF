@@ -1,0 +1,1133 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "STTA-DVF API",
+    "description": "API d'estimation immobiliere basee sur les donnees DVF.",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "summary": "Health",
+        "description": "Health check : verifie la connexion DB et PostGIS.",
+        "operationId": "health_api_v1_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/defaults": {
+      "get": {
+        "summary": "Defaults",
+        "description": "Retourne les coefficients par defaut (pour les sliders admin frontend).",
+        "operationId": "defaults_api_v1_defaults_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/estimate": {
+      "post": {
+        "summary": "Estimate",
+        "description": "Endpoint principal d'estimation immobiliere.",
+        "operationId": "estimate_api_v1_estimate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EstimationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstimationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AdjustmentDetail": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "coefficient": {
+            "type": "number",
+            "title": "Coefficient"
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "coefficient",
+          "explanation"
+        ],
+        "title": "AdjustmentDetail",
+        "description": "Detail d'un ajustement individuel."
+      },
+      "AdjustmentsSection": {
+        "properties": {
+          "base_price": {
+            "type": "number",
+            "title": "Base Price"
+          },
+          "adjusted_price": {
+            "type": "number",
+            "title": "Adjusted Price"
+          },
+          "total_multiplier": {
+            "type": "number",
+            "title": "Total Multiplier"
+          },
+          "details": {
+            "items": {
+              "$ref": "#/components/schemas/AdjustmentDetail"
+            },
+            "type": "array",
+            "title": "Details"
+          }
+        },
+        "type": "object",
+        "required": [
+          "base_price",
+          "adjusted_price",
+          "total_multiplier",
+          "details"
+        ],
+        "title": "AdjustmentsSection",
+        "description": "Section ajustements heuristiques."
+      },
+      "CoefficientOverridesSchema": {
+        "properties": {
+          "type_coefficients": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type Coefficients"
+          },
+          "quality_coefficients": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Coefficients"
+          },
+          "condition_coefficients": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Condition Coefficients"
+          },
+          "construction_coefficients": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Construction Coefficients"
+          },
+          "characteristic_adjustments": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Characteristic Adjustments"
+          },
+          "floor_params": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FloorParamsSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "CoefficientOverridesSchema",
+        "description": "Surcharges optionnelles des coefficients d'ajustement."
+      },
+      "ComparableItem": {
+        "properties": {
+          "id_mutation": {
+            "type": "string",
+            "title": "Id Mutation"
+          },
+          "date_mutation": {
+            "type": "string",
+            "title": "Date Mutation"
+          },
+          "valeur_fonciere": {
+            "type": "number",
+            "title": "Valeur Fonciere"
+          },
+          "type_bien": {
+            "type": "string",
+            "title": "Type Bien"
+          },
+          "surface": {
+            "type": "number",
+            "title": "Surface"
+          },
+          "nb_pieces": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nb Pieces"
+          },
+          "prix_m2": {
+            "type": "number",
+            "title": "Prix M2"
+          },
+          "code_commune": {
+            "type": "string",
+            "title": "Code Commune"
+          },
+          "nom_commune": {
+            "type": "string",
+            "title": "Nom Commune"
+          },
+          "code_departement": {
+            "type": "string",
+            "title": "Code Departement"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "distance_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distance M"
+          },
+          "zone": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Zone"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id_mutation",
+          "date_mutation",
+          "valeur_fonciere",
+          "type_bien",
+          "surface",
+          "prix_m2",
+          "code_commune",
+          "nom_commune",
+          "code_departement"
+        ],
+        "title": "ComparableItem",
+        "description": "Transaction comparable individuelle."
+      },
+      "ComparablesSection": {
+        "properties": {
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ComparableItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "count",
+          "items"
+        ],
+        "title": "ComparablesSection",
+        "description": "Section comparables."
+      },
+      "ConfidenceSchema": {
+        "properties": {
+          "level": {
+            "type": "string",
+            "title": "Level"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "low_estimate": {
+            "type": "number",
+            "title": "Low Estimate"
+          },
+          "high_estimate": {
+            "type": "number",
+            "title": "High Estimate"
+          }
+        },
+        "type": "object",
+        "required": [
+          "level",
+          "label",
+          "low_estimate",
+          "high_estimate"
+        ],
+        "title": "ConfidenceSchema",
+        "description": "Niveau de confiance et fourchette de prix."
+      },
+      "EstimationRequest": {
+        "properties": {
+          "address": {
+            "type": "string",
+            "minLength": 3,
+            "title": "Address"
+          },
+          "postcode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Postcode"
+          },
+          "property_type": {
+            "type": "string",
+            "title": "Property Type",
+            "description": "appartement, maison, duplex, triplex, loft, hotel_particulier"
+          },
+          "surface": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Surface"
+          },
+          "nb_pieces": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nb Pieces"
+          },
+          "nb_salles_de_bain": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nb Salles De Bain"
+          },
+          "etage": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Etage"
+          },
+          "nb_etages_immeuble": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nb Etages Immeuble"
+          },
+          "ascenseur": {
+            "type": "boolean",
+            "title": "Ascenseur",
+            "default": false
+          },
+          "balcon": {
+            "type": "boolean",
+            "title": "Balcon",
+            "default": false
+          },
+          "terrasse": {
+            "type": "boolean",
+            "title": "Terrasse",
+            "default": false
+          },
+          "cave": {
+            "type": "boolean",
+            "title": "Cave",
+            "default": false
+          },
+          "parking": {
+            "type": "boolean",
+            "title": "Parking",
+            "default": false
+          },
+          "chambre_service": {
+            "type": "boolean",
+            "title": "Chambre Service",
+            "default": false
+          },
+          "vue_exceptionnelle": {
+            "type": "boolean",
+            "title": "Vue Exceptionnelle",
+            "default": false
+          },
+          "parties_communes_renovees": {
+            "type": "boolean",
+            "title": "Parties Communes Renovees",
+            "default": false
+          },
+          "ravalement_recent": {
+            "type": "boolean",
+            "title": "Ravalement Recent",
+            "default": false
+          },
+          "condition": {
+            "type": "string",
+            "title": "Condition",
+            "default": "standard"
+          },
+          "quality": {
+            "type": "string",
+            "title": "Quality",
+            "default": "comparable"
+          },
+          "construction_period": {
+            "type": "string",
+            "title": "Construction Period",
+            "default": "unknown"
+          },
+          "zone_config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ZoneConfigSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "coefficient_overrides": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CoefficientOverridesSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "include": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Include"
+          }
+        },
+        "type": "object",
+        "required": [
+          "address",
+          "property_type",
+          "surface"
+        ],
+        "title": "EstimationRequest",
+        "description": "Requete d'estimation immobiliere."
+      },
+      "EstimationResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "geocoding": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GeocodingSection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "estimation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EstimationSection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "adjustments": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdjustmentsSection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "zone_stats": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ZoneStatsSection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "evolution": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvolutionSection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "comparables": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ComparablesSection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "EstimationResponse",
+        "description": "Reponse complete de l'API d'estimation."
+      },
+      "EstimationSection": {
+        "properties": {
+          "prix_m2_base": {
+            "type": "number",
+            "title": "Prix M2 Base"
+          },
+          "prix_total_base": {
+            "type": "number",
+            "title": "Prix Total Base"
+          },
+          "adjustment_factor": {
+            "type": "number",
+            "title": "Adjustment Factor"
+          },
+          "prix_m2_ajuste": {
+            "type": "number",
+            "title": "Prix M2 Ajuste"
+          },
+          "prix_total_ajuste": {
+            "type": "number",
+            "title": "Prix Total Ajuste"
+          },
+          "total_multiplier": {
+            "type": "number",
+            "title": "Total Multiplier"
+          },
+          "confidence": {
+            "$ref": "#/components/schemas/ConfidenceSchema"
+          },
+          "nb_comparables": {
+            "type": "integer",
+            "title": "Nb Comparables"
+          },
+          "niveau_geo": {
+            "type": "string",
+            "title": "Niveau Geo"
+          },
+          "zone_breakdown": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/ZoneBreakdownItem"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Zone Breakdown"
+          },
+          "zone_config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ZoneConfigSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "prix_m2_base",
+          "prix_total_base",
+          "adjustment_factor",
+          "prix_m2_ajuste",
+          "prix_total_ajuste",
+          "total_multiplier",
+          "confidence",
+          "nb_comparables",
+          "niveau_geo"
+        ],
+        "title": "EstimationSection",
+        "description": "Section estimation avec prix base + ajuste."
+      },
+      "EvolutionSection": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "semester": {
+            "items": {
+              "$ref": "#/components/schemas/SemesterItem"
+            },
+            "type": "array",
+            "title": "Semester"
+          },
+          "monthly": {
+            "items": {
+              "$ref": "#/components/schemas/MonthlyItem"
+            },
+            "type": "array",
+            "title": "Monthly"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "semester",
+          "monthly"
+        ],
+        "title": "EvolutionSection",
+        "description": "Section evolution historique."
+      },
+      "FloorParamsSchema": {
+        "properties": {
+          "ground_floor_discount": {
+            "type": "number",
+            "title": "Ground Floor Discount",
+            "default": 0.07
+          },
+          "elevator_bonus_per_floor": {
+            "type": "number",
+            "title": "Elevator Bonus Per Floor",
+            "default": 0.01
+          },
+          "no_elevator_penalty_per_floor": {
+            "type": "number",
+            "title": "No Elevator Penalty Per Floor",
+            "default": 0.03
+          },
+          "last_floor_bonus": {
+            "type": "number",
+            "title": "Last Floor Bonus",
+            "default": 0.03
+          },
+          "max_elevator_bonus": {
+            "type": "number",
+            "title": "Max Elevator Bonus",
+            "default": 0.05
+          },
+          "max_no_elevator_penalty": {
+            "type": "number",
+            "title": "Max No Elevator Penalty",
+            "default": 0.12
+          }
+        },
+        "type": "object",
+        "title": "FloorParamsSchema",
+        "description": "Parametres d'ajustement etage."
+      },
+      "GeocodingSection": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "latitude": {
+            "type": "number",
+            "title": "Latitude"
+          },
+          "longitude": {
+            "type": "number",
+            "title": "Longitude"
+          },
+          "citycode": {
+            "type": "string",
+            "title": "Citycode"
+          },
+          "city": {
+            "type": "string",
+            "title": "City"
+          },
+          "postcode": {
+            "type": "string",
+            "title": "Postcode"
+          },
+          "context": {
+            "type": "string",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "score",
+          "latitude",
+          "longitude",
+          "citycode",
+          "city",
+          "postcode",
+          "context"
+        ],
+        "title": "GeocodingSection",
+        "description": "Resultat du geocodage."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "database": {
+            "type": "string",
+            "title": "Database"
+          },
+          "postgis_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Postgis Version"
+          },
+          "transactions_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transactions Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "database"
+        ],
+        "title": "HealthResponse",
+        "description": "Reponse du health check."
+      },
+      "MonthlyItem": {
+        "properties": {
+          "annee_mois": {
+            "type": "string",
+            "title": "Annee Mois"
+          },
+          "nb_transactions": {
+            "type": "integer",
+            "title": "Nb Transactions"
+          },
+          "median_prix_m2": {
+            "type": "number",
+            "title": "Median Prix M2"
+          },
+          "rolling_median_6m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rolling Median 6M"
+          }
+        },
+        "type": "object",
+        "required": [
+          "annee_mois",
+          "nb_transactions",
+          "median_prix_m2"
+        ],
+        "title": "MonthlyItem",
+        "description": "Donnee mensuelle depuis indices_temporels."
+      },
+      "SemesterItem": {
+        "properties": {
+          "annee": {
+            "type": "integer",
+            "title": "Annee"
+          },
+          "semestre": {
+            "type": "integer",
+            "title": "Semestre"
+          },
+          "nb_transactions": {
+            "type": "integer",
+            "title": "Nb Transactions"
+          },
+          "median_prix_m2": {
+            "type": "number",
+            "title": "Median Prix M2"
+          },
+          "q1_prix_m2": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Q1 Prix M2"
+          },
+          "q3_prix_m2": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Q3 Prix M2"
+          }
+        },
+        "type": "object",
+        "required": [
+          "annee",
+          "semestre",
+          "nb_transactions",
+          "median_prix_m2"
+        ],
+        "title": "SemesterItem",
+        "description": "Donnee d'un semestre."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "ZoneBreakdownItem": {
+        "properties": {
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "median_prix_m2": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Prix M2"
+          },
+          "effective_weight": {
+            "type": "number",
+            "title": "Effective Weight"
+          }
+        },
+        "type": "object",
+        "required": [
+          "count",
+          "median_prix_m2",
+          "effective_weight"
+        ],
+        "title": "ZoneBreakdownItem",
+        "description": "Detail d'une zone dans le zone_breakdown."
+      },
+      "ZoneConfigSchema": {
+        "properties": {
+          "radius_1_km": {
+            "type": "number",
+            "title": "Radius 1 Km",
+            "default": 1.0
+          },
+          "radius_2_km": {
+            "type": "number",
+            "title": "Radius 2 Km",
+            "default": 2.0
+          },
+          "radius_3_km": {
+            "type": "number",
+            "title": "Radius 3 Km",
+            "default": 3.0
+          },
+          "weight_1": {
+            "type": "number",
+            "title": "Weight 1",
+            "default": 0.6
+          },
+          "weight_2": {
+            "type": "number",
+            "title": "Weight 2",
+            "default": 0.3
+          },
+          "weight_3": {
+            "type": "number",
+            "title": "Weight 3",
+            "default": 0.1
+          }
+        },
+        "type": "object",
+        "title": "ZoneConfigSchema",
+        "description": "Configuration des 3 zones concentriques."
+      },
+      "ZoneStatsSection": {
+        "properties": {
+          "total_transactions": {
+            "type": "integer",
+            "title": "Total Transactions"
+          },
+          "last_12m_transactions": {
+            "type": "integer",
+            "title": "Last 12M Transactions"
+          },
+          "median_prix_m2_12m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Prix M2 12M"
+          },
+          "stddev_prix_m2_12m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stddev Prix M2 12M"
+          },
+          "trend_12m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trend 12M"
+          },
+          "data_quality_flag": {
+            "type": "string",
+            "title": "Data Quality Flag"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_transactions",
+          "last_12m_transactions",
+          "data_quality_flag"
+        ],
+        "title": "ZoneStatsSection",
+        "description": "Statistiques de zone depuis mart.zone_stats."
+      }
+    }
+  }
+}
