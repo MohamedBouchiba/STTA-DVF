@@ -2,9 +2,9 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Dependances systeme: PostgreSQL client, nginx, envsubst
+# Dependances systeme pour psycopg2
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq-dev gcc nginx gettext-base dos2unix curl \
+    libpq-dev gcc \
     && rm -rf /var/lib/apt/lists/*
 
 # Dependances Python
@@ -14,13 +14,9 @@ RUN pip install --no-cache-dir -r requirements-api.txt
 # Code source
 COPY src/ src/
 
-# Scripts de deploiement (nginx conf + entrypoint)
-COPY deploy/ deploy/
-RUN dos2unix deploy/* && chmod +x deploy/start.sh
-
 # Railway injecte $PORT (defaut 8000 en local)
 ENV PORT=8000
 
 EXPOSE ${PORT}
 
-CMD ["bash", "deploy/start.sh"]
+CMD uvicorn src.api.main:app --host 0.0.0.0 --port ${PORT} --workers 2 --timeout-keep-alive 65

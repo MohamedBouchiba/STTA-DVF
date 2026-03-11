@@ -6,7 +6,7 @@ import time
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import text
 
 from src.db import get_engine
@@ -40,6 +40,12 @@ async def add_process_time_header(request: Request, call_next):
     response = await call_next(request)
     response.headers["X-Process-Time"] = f"{time.time() - start:.3f}"
     return response
+
+
+@app.get("/", include_in_schema=False)
+def root():
+    """Redirige vers la documentation Swagger."""
+    return RedirectResponse(url="/docs")
 
 
 @app.get("/api/v1/health", response_model=HealthResponse)
