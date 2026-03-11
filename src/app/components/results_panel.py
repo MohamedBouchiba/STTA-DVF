@@ -377,8 +377,8 @@ def _render_scatter(result: EstimationResult, estimated_prix_m2: float, surface:
         ),
     ))
 
+    fig.update_layout(**theme)
     fig.update_layout(
-        **theme,
         xaxis=dict(
             title=dict(text="Surface (m\u00b2)", font=dict(size=12, color=TEXT_SECONDARY)),
             gridcolor=BORDER,
