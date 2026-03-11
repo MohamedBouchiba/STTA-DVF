@@ -1,4 +1,4 @@
-"""Composant d'affichage du resultat d'estimation."""
+"""Composant d'affichage du resultat d'estimation (dark theme, style pro)."""
 
 import streamlit as st
 
@@ -9,72 +9,74 @@ from src.app.utils.formatting import (
     format_percentage,
     confidence_color,
 )
+from src.app.utils.css import TEXT_SECONDARY
 
 
 def render_estimation(result: EstimationResult):
-    """Affiche le resultat d'une estimation."""
+    """Affiche le resultat d'une estimation (sans ajustements)."""
     if result.nb_comparables == 0:
         st.error("Estimation impossible : aucune transaction comparable trouvee dans la zone.")
         return
 
     # Prix estime principal
-    st.subheader("Estimation de prix")
+    color = confidence_color(result.confidence.level)
+    bg_map = {"high": "rgba(63,185,80,0.15)", "medium": "rgba(212,168,67,0.15)", "low": "rgba(248,81,73,0.15)"}
+    bg_pill = bg_map.get(result.confidence.level, "rgba(139,148,158,0.15)")
 
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric(
-            label="Prix estime",
-            value=format_price(result.prix_total_estime),
-        )
-    with col2:
-        st.metric(
-            label="Prix au m\u00b2",
-            value=format_price_m2(result.prix_m2_estime),
-        )
-    with col3:
-        color = confidence_color(result.confidence.level)
-        st.markdown(
-            f'<div style="text-align:center; padding:10px;">'
-            f'<span style="color:{color}; font-size:1.5em; font-weight:bold;">'
-            f'{result.confidence.level_label}'
-            f'</span></div>',
-            unsafe_allow_html=True,
-        )
-
-    # Intervalle de confiance
-    st.info(
-        f"Fourchette estimee : **{format_price(result.confidence.low_estimate)}** "
-        f"- **{format_price(result.confidence.high_estimate)}**"
+    st.markdown(
+        f'<div class="result-card">'
+        f'<div class="result-price">{format_price(result.prix_total_estime)}</div>'
+        f'<div class="result-price-m2">soit {format_price_m2(result.prix_m2_estime)}</div>'
+        f'<div class="result-confidence" style="color:{color}; background:{bg_pill}; border:1px solid {color};">'
+        f"Confiance {result.confidence.level_label}"
+        f"</div>"
+        f'<div style="margin-top:0.8rem; font-size:0.8rem; color:{TEXT_SECONDARY};">'
+        f"{result.nb_comparables} transactions comparables &middot; {result.niveau_geo}"
+        f"</div>"
+        f"</div>",
+        unsafe_allow_html=True,
     )
 
-    # Details
-    with st.expander("Details de l'estimation", expanded=False):
-        st.write(f"- **Adresse geocodee** : {result.geocoding.label}")
-        st.write(f"- **Code INSEE** : {result.geocoding.citycode}")
-        st.write(f"- **Perimetre** : {result.niveau_geo}")
-        st.write(f"- **Comparables utilises** : {result.nb_comparables}")
-        st.write(f"- **Ajustement surface** : {result.adjustment_factor:.2%}")
+    # Fourchette
+    st.markdown(
+        f'<div class="result-range">'
+        f"Fourchette estimee : <b>{format_price(result.confidence.low_estimate)}</b>"
+        f" &ndash; <b>{format_price(result.confidence.high_estimate)}</b>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
 
-        if result.zone_stats:
-            st.write("---")
-            st.write("**Statistiques de zone :**")
-            zs = result.zone_stats
-            st.write(f"- Transactions totales : {zs['total_transactions']}")
-            st.write(f"- Transactions 12 derniers mois : {zs['last_12m_transactions']}")
-            if zs["median_prix_m2_12m"]:
-                st.write(f"- Mediane prix/m\u00b2 (12 mois) : {format_price_m2(zs['median_prix_m2_12m'])}")
-            st.write(f"- Tendance 12 mois : {format_percentage(zs['trend_12m'])}")
-            st.write(f"- Qualite donnees : {zs['data_quality_flag']}")
+    # Synthese
+    rows = (
+        f'<div class="summary-row">'
+        f'<span class="summary-label">Adresse</span>'
+        f'<span class="summary-value">{result.geocoding.label}</span></div>'
+        f'<div class="summary-row">'
+        f'<span class="summary-label">Comparables</span>'
+        f'<span class="summary-value">{result.nb_comparables}</span></div>'
+        f'<div class="summary-row">'
+        f'<span class="summary-label">Perimetre</span>'
+        f'<span class="summary-value">{result.niveau_geo}</span></div>'
+        f'<div class="summary-row">'
+        f'<span class="summary-label">Ajustement surface</span>'
+        f'<span class="summary-value">{result.adjustment_factor:.2%}</span></div>'
+    )
 
-    # Tableau des comparables
-    if len(result.comparables) > 0:
-        with st.expander(f"Transactions comparables ({result.nb_comparables})", expanded=False):
-            display_df = result.comparables[
-                ["date_mutation", "valeur_fonciere", "surface", "nb_pieces", "prix_m2", "nom_commune"]
-            ].copy()
-            display_df.columns = ["Date", "Prix", "Surface", "Pieces", "Prix/m\u00b2", "Commune"]
-            display_df["Date"] = display_df["Date"].astype(str)
-            display_df["Prix"] = display_df["Prix"].apply(lambda x: f"{x:,.0f} EUR".replace(",", " "))
-            display_df["Surface"] = display_df["Surface"].apply(lambda x: f"{x:.0f} m\u00b2")
-            display_df["Prix/m\u00b2"] = display_df["Prix/m\u00b2"].apply(lambda x: f"{x:,.0f} EUR".replace(",", " "))
-            st.dataframe(display_df, use_container_width=True, hide_index=True)
+    if result.zone_stats and result.zone_stats.get("median_prix_m2_12m"):
+        zs = result.zone_stats
+        rows += (
+            f'<div class="summary-row">'
+            f'<span class="summary-label">Mediane zone (12 mois)</span>'
+            f'<span class="summary-value">{format_price_m2(zs["median_prix_m2_12m"])}</span></div>'
+            f'<div class="summary-row">'
+            f'<span class="summary-label">Tendance 12 mois</span>'
+            f'<span class="summary-value">{format_percentage(zs["trend_12m"])}</span></div>'
+        )
+
+    st.markdown(
+        f'<div class="result-summary">'
+        f'<div class="summary-title">Synthese de l\'estimation</div>'
+        f"{rows}"
+        f"</div>",
+        unsafe_allow_html=True,
+    )

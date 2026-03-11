@@ -28,10 +28,19 @@ def format_percentage(value: float | None) -> str:
     return f"{sign}{value:.1f}%".replace(".", ",")
 
 
+def format_distance(distance_m: float | None) -> str:
+    """Formate une distance en metres ou km. Ex: 850 -> '850 m', 1200 -> '1.2 km'."""
+    if distance_m is None:
+        return "N/A"
+    if distance_m < 1000:
+        return f"{distance_m:.0f} m"
+    return f"{distance_m / 1000:.1f} km"
+
+
 def confidence_color(level: str) -> str:
     """Retourne la couleur CSS pour un niveau de confiance."""
     return {
-        "high": "#28a745",    # vert
-        "medium": "#ffc107",  # jaune
-        "low": "#dc3545",     # rouge
-    }.get(level, "#6c757d")
+        "high": "#3FB950",    # vert
+        "medium": "#D4A843",  # or
+        "low": "#F85149",     # rouge
+    }.get(level, "#8B949E")
