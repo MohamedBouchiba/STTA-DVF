@@ -51,13 +51,13 @@ class TestFormatPercentage:
 
 class TestConfidenceColor:
     def test_high(self):
-        assert confidence_color("high") == "#28a745"
+        assert confidence_color("high") == "#3FB950"
 
     def test_medium(self):
-        assert confidence_color("medium") == "#ffc107"
+        assert confidence_color("medium") == "#D4A843"
 
     def test_low(self):
-        assert confidence_color("low") == "#dc3545"
+        assert confidence_color("low") == "#F85149"
 
     def test_unknown(self):
-        assert confidence_color("unknown") == "#6c757d"
+        assert confidence_color("unknown") == "#8B949E"

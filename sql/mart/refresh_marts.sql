@@ -70,7 +70,7 @@ SELECT
         WHEN (SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY p.prix_m2)
               FROM prev_12m p
               WHERE p.code_commune = l.code_commune AND p.type_bien = l.type_bien) > 0
-        THEN ROUND(
+        THEN ROUND((
             100.0 * (
                 PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY l.prix_m2)
                 - (SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY p.prix_m2)
@@ -78,9 +78,8 @@ SELECT
                    WHERE p.code_commune = l.code_commune AND p.type_bien = l.type_bien)
             ) / (SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY p.prix_m2)
                  FROM prev_12m p
-                 WHERE p.code_commune = l.code_commune AND p.type_bien = l.type_bien),
-            2
-        )
+                 WHERE p.code_commune = l.code_commune AND p.type_bien = l.type_bien)
+        )::NUMERIC, 2)
     END AS trend_12m,
     CASE
         WHEN COUNT(*) >= 30 THEN 'good'

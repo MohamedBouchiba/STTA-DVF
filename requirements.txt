@@ -10,4 +10,5 @@ tenacity>=8.2
 python-dotenv>=1.0
 click>=8.0
 tqdm>=4.65
+plotly>=5.18
 pytest>=7.0

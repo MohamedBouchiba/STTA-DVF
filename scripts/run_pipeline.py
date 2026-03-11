@@ -87,7 +87,6 @@ def load(year, dep):
     run_id = str(uuid.uuid4())[:8]
     log_id = log_start(run_id, "load_and_transform")
 
-    create_core_tables()
     load_and_transform(years=years, departements=departements)
 
     log_finish(log_id, "success")

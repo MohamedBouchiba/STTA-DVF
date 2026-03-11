@@ -39,7 +39,6 @@ def geocode(address: str, limit: int = 5, postcode: str | None = None) -> list[G
     params = {
         "q": address,
         "limit": limit,
-        "type": "housenumber",
     }
     if postcode:
         params["postcode"] = postcode

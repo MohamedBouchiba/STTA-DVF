@@ -176,6 +176,16 @@ def load_and_transform(
                 print(f"[SKIP] {csv_path} non trouve")
                 continue
 
+            # Verifier si deja charge dans core
+            with engine.connect() as conn:
+                already = conn.execute(
+                    text("SELECT COUNT(*) FROM core.transactions WHERE code_departement = :dep AND annee = :year"),
+                    {"dep": dep, "year": year}
+                ).scalar()
+            if already > 0:
+                print(f"[SKIP] {year}/{dep} deja charge ({already:,} rows)")
+                continue
+
             print(f"\n--- {year}/{dep} ---")
 
             # 1. Truncate staging
@@ -196,6 +206,7 @@ def load_and_transform(
                 ).scalar()
 
             with engine.begin() as conn:
+                conn.execute(text("SET statement_timeout = '300s'"))
                 for stmt in transform_sql.split(";"):
                     stmt = stmt.strip()
                     if stmt:

@@ -26,4 +26,4 @@ CREATE TABLE mart.stats_departement (
     q3_prix_m2       NUMERIC(10,2),
     median_surface   NUMERIC(10,2),
     PRIMARY KEY (code_departement, type_bien, annee, semestre)
-)
+);

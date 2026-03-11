@@ -40,7 +40,7 @@ WITH lots_residentiels AS (
     FROM staging.dvf
     WHERE nature_mutation = 'Vente'
       AND code_type_local IN (1, 2)
-      AND valeur_fonciere > 0
+      AND valeur_fonciere >= 100
       AND surface_reelle_bati IS NOT NULL
       AND surface_reelle_bati >= 9
 ),
@@ -85,5 +85,3 @@ SELECT
     valeur_fonciere / surface_reelle_bati AS prix_m2
 FROM mono_bien
 WHERE valeur_fonciere / surface_reelle_bati > 0
-  -- Eviter les doublons si le meme CSV est charge deux fois
-  AND id_mutation NOT IN (SELECT DISTINCT id_mutation FROM core.transactions)

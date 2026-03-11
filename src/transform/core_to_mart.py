@@ -47,11 +47,14 @@ def refresh_marts():
 
     for block in statements:
         for stmt in block.split(";"):
-            stmt = stmt.strip()
-            if stmt and not stmt.startswith("--"):
+            # Retirer les lignes de commentaires avant de verifier si le statement est vide
+            lines = [l for l in stmt.strip().splitlines() if not l.strip().startswith("--")]
+            clean = "\n".join(lines).strip()
+            if clean:
                 with engine.begin() as conn:
-                    print(f"  Executing: {stmt[:80]}...")
-                    conn.execute(text(stmt))
+                    conn.execute(text("SET statement_timeout = '300s'"))
+                    print(f"  Executing: {clean[:80]}...")
+                    conn.execute(text(clean))
 
     # Comptages
     with engine.connect() as conn:

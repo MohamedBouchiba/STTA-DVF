@@ -45,4 +45,4 @@ CREATE INDEX IF NOT EXISTS idx_tx_dept_type ON core.transactions (code_departeme
 CREATE INDEX IF NOT EXISTS idx_tx_date ON core.transactions (date_mutation);
 CREATE INDEX IF NOT EXISTS idx_tx_prix_m2 ON core.transactions (prix_m2);
 CREATE INDEX IF NOT EXISTS idx_tx_geom ON core.transactions USING GIST (geom);
-CREATE INDEX IF NOT EXISTS idx_tx_not_outlier ON core.transactions (is_outlier) WHERE NOT is_outlier
+CREATE INDEX IF NOT EXISTS idx_tx_not_outlier ON core.transactions (is_outlier) WHERE NOT is_outlier;

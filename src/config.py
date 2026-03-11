@@ -17,7 +17,7 @@ SQL_DIR = PROJECT_ROOT / "sql"
 
 # Source DVF Etalab
 ETALAB_BASE_URL = "https://files.data.gouv.fr/geo-dvf/latest/csv"
-DVF_YEARS = [2019, 2020, 2021, 2022, 2023, 2024]
+DVF_YEARS = [2020, 2021, 2022, 2023, 2024, 2025]
 DVF_DEPARTEMENTS = ["13", "75", "77", "78", "91", "92", "93", "94", "95"]
 
 # Geocodage
