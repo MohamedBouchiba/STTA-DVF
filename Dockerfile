@@ -4,7 +4,7 @@ WORKDIR /app
 
 # Dependances systeme: PostgreSQL client, nginx, envsubst
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq-dev gcc nginx gettext-base \
+    libpq-dev gcc nginx gettext-base dos2unix curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Dependances Python
@@ -16,7 +16,7 @@ COPY src/ src/
 
 # Scripts de deploiement (nginx conf + entrypoint)
 COPY deploy/ deploy/
-RUN chmod +x deploy/start.sh
+RUN dos2unix deploy/* && chmod +x deploy/start.sh
 
 # Railway injecte $PORT (defaut 8000 en local)
 ENV PORT=8000
