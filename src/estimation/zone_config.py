@@ -17,6 +17,7 @@ class ZoneConfig:
     weight_1: float = 0.60
     weight_2: float = 0.30
     weight_3: float = 0.10
+    max_comparables: int = 500
 
     @property
     def radii_meters(self) -> tuple[float, float, float]:

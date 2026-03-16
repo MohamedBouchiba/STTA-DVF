@@ -81,6 +81,7 @@ def find_comparables(
         "r1": r1,
         "r2": r2,
         "r3": r3,
+        "max_comp": zone_config.max_comparables,
     }
 
     # ---- Level 1 : Multi-zones (3 zones concentriques) ----
@@ -109,7 +110,7 @@ def find_comparables(
           AND t.date_mutation >= CURRENT_DATE - INTERVAL '24 months'
           {surface_filter}
         ORDER BY distance_m
-        LIMIT 500
+        LIMIT :max_comp
     """
 
     df = pd.read_sql(text(query_zones), engine, params=params)
@@ -188,7 +189,7 @@ def find_comparables(
               AND {lvl['where']}
               {surface_filter}
             ORDER BY t.date_mutation DESC
-            LIMIT 500
+            LIMIT :max_comp
         """
 
         df = pd.read_sql(text(query), engine, params=params)

@@ -148,9 +148,17 @@ def render_admin_panel() -> CoefficientOverrides | None:
             else:
                 st.warning("Au moins un poids doit etre > 0")
 
+            st.caption("Nombre max de transactions")
+            max_comp = st.slider(
+                "Max comparables", min_value=200, max_value=1000,
+                value=int(current_zone.get("max_comparables", zone_defaults.get("max_comparables", 500))),
+                step=50, key="admin_zone_max_comp",
+            )
+
             current_zone.update({
                 "radius_1_km": r1, "radius_2_km": r2, "radius_3_km": r3,
                 "weight_1": w1, "weight_2": w2, "weight_3": w3,
+                "max_comparables": max_comp,
             })
 
         ov = st.session_state["admin_overrides"]
@@ -169,5 +177,6 @@ def render_admin_panel() -> CoefficientOverrides | None:
                 weight_1=zone_dict["weight_1"],
                 weight_2=zone_dict["weight_2"],
                 weight_3=zone_dict["weight_3"],
+                max_comparables=int(zone_dict.get("max_comparables", 500)),
             ),
         )
