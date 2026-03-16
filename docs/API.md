@@ -26,7 +26,7 @@
    - [Zones concentriques](#71-zones-concentriques-zone_config)
    - [Surcharges de coefficients](#72-surcharges-de-coefficients-coefficient_overrides)
 8. [Codes d'erreur](#8-codes-derreur)
-9. [Déploiement Docker](#9-déploiement-docker)
+9. [Déploiement (Railway)](#9-déploiement-railway)
 10. [Architecture et flux de données](#10-architecture-et-flux-de-données)
 11. [Coefficients par défaut](#11-coefficients-par-défaut)
 12. [Exemples complets](#12-exemples-complets)
@@ -83,14 +83,14 @@ uvicorn src.api.main:app --host 0.0.0.0 --port 8000
 
 Une fois lancée, la documentation Swagger/OpenAPI est disponible à :
 
-- **Swagger UI** : `http://localhost:8000/docs`
-- **ReDoc** : `http://localhost:8000/redoc`
-- **OpenAPI JSON** : `http://localhost:8000/openapi.json`
+- **Swagger UI** : `https://stta-dvf-production-c7bc.up.railway.app/docs`
+- **ReDoc** : `https://stta-dvf-production-c7bc.up.railway.app/redoc`
+- **OpenAPI JSON** : `https://stta-dvf-production-c7bc.up.railway.app/openapi.json`
 
 ### Premier appel
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/estimate \
+curl -X POST https://stta-dvf-production-c7bc.up.railway.app/api/v1/estimate \
   -H "Content-Type: application/json" \
   -d '{"address": "25 avenue des Champs-Elysées, Paris", "property_type": "appartement", "surface": 50}'
 ```
@@ -98,6 +98,13 @@ curl -X POST http://localhost:8000/api/v1/estimate \
 ---
 
 ## 3. Endpoints
+
+| Méthode | URL | Description |
+|---------|-----|-------------|
+| `GET` | `/` | Redirige vers `/docs` (Swagger UI) |
+| `GET` | `/api/v1/health` | Health check (DB + PostGIS) |
+| `GET` | `/api/v1/defaults` | Coefficients par défaut |
+| `POST` | `/api/v1/estimate` | Estimation complète |
 
 ### 3.1 GET /api/v1/health
 
@@ -674,53 +681,43 @@ Permet à un admin de surcharger les coefficients d'ajustement par défaut.
 
 ---
 
-## 9. Déploiement Docker
+## 9. Déploiement (Railway)
 
-### Build
+Le projet est déployé en **2 services Railway** depuis le même repo GitHub :
 
-```bash
-docker build -t stta-dvf-api .
-```
+| Service | Dockerfile | URL de production |
+|---------|-----------|-------------------|
+| **API** | `Dockerfile` | [stta-dvf-production-c7bc.up.railway.app](https://stta-dvf-production-c7bc.up.railway.app) |
+| **Frontend** | `Dockerfile.streamlit` | Domaine Railway séparé |
 
-### Run
-
-```bash
-docker run -d \
-  --name stta-dvf-api \
-  --env-file .env \
-  -p 8000:8000 \
-  stta-dvf-api
-```
-
-### Variables d'environnement requises
+### Variables d'environnement
 
 | Variable | Requis | Description |
 |----------|--------|-------------|
 | `DATABASE_URL` | Oui | URL de connexion PostgreSQL (avec `?sslmode=require` pour Supabase) |
 | `ALLOWED_ORIGINS` | Non | Origines CORS autorisées, séparées par virgules (défaut: `*`) |
+| `PORT` | Non | Injecté automatiquement par Railway |
 
-### Docker Compose (exemple)
+### Configuration Railway
 
-```yaml
-version: "3.8"
-services:
-  api:
-    build: .
-    ports:
-      - "8000:8000"
-    env_file:
-      - .env
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+- **Health Check Path** : `/api/v1/health`
+- **Port** : auto-détecté (ne pas configurer manuellement)
+
+### Build & Run local
+
+```bash
+# API
+docker build -t stta-dvf-api .
+docker run --env-file .env -p 8000:8000 stta-dvf-api
+
+# Frontend
+docker build -f Dockerfile.streamlit -t stta-dvf-front .
+docker run --env-file .env -p 8501:8501 stta-dvf-front
 ```
 
 ### Performance
 
-L'API est synchrone (pas d'async). Chaque requête d'estimation prend environ :
+Chaque requête d'estimation prend environ :
 
 | Étape | Durée typique |
 |-------|---------------|
@@ -729,12 +726,6 @@ L'API est synchrone (pas d'async). Chaque requête d'estimation prend environ :
 | Calculs (médiane, ajustements, confiance) | ~10-50 ms |
 | Requêtes évolution (2 queries SQL) | ~100-300 ms |
 | **Total** | **~0.6 - 1.5 s** |
-
-Pour un déploiement production, utiliser plusieurs workers :
-
-```bash
-uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --workers 4
-```
 
 ---
 
@@ -890,7 +881,7 @@ Retournés par `GET /api/v1/defaults`. Ces valeurs sont utilisées quand aucun `
 ### Estimation minimale
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/estimate \
+curl -X POST https://stta-dvf-production-c7bc.up.railway.app/api/v1/estimate \
   -H "Content-Type: application/json" \
   -d '{
     "address": "25 avenue des Champs-Elysées, Paris",
@@ -902,7 +893,7 @@ curl -X POST http://localhost:8000/api/v1/estimate \
 ### Estimation avec toutes les options
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/estimate \
+curl -X POST https://stta-dvf-production-c7bc.up.railway.app/api/v1/estimate \
   -H "Content-Type: application/json" \
   -d '{
     "address": "15 rue de la Paix, Paris",
@@ -939,7 +930,7 @@ curl -X POST http://localhost:8000/api/v1/estimate \
 ### Estimation avec surcharges admin
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/estimate \
+curl -X POST https://stta-dvf-production-c7bc.up.railway.app/api/v1/estimate \
   -H "Content-Type: application/json" \
   -d '{
     "address": "1 avenue du Prado, Marseille",
@@ -959,7 +950,7 @@ curl -X POST http://localhost:8000/api/v1/estimate \
 ### Estimation pour carte uniquement
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/estimate \
+curl -X POST https://stta-dvf-production-c7bc.up.railway.app/api/v1/estimate \
   -H "Content-Type: application/json" \
   -d '{
     "address": "1 place de la Bastille, Paris",
@@ -972,7 +963,7 @@ curl -X POST http://localhost:8000/api/v1/estimate \
 ### Graphique d'évolution uniquement
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/estimate \
+curl -X POST https://stta-dvf-production-c7bc.up.railway.app/api/v1/estimate \
   -H "Content-Type: application/json" \
   -d '{
     "address": "12 rue de Rivoli, Paris",

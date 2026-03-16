@@ -2,7 +2,7 @@
 
 Estimateur de prix immobilier pour la France, basé sur les données ouvertes DVF (Demandes de Valeurs Foncières). Méthode : médiane pondérée multi-zones des transactions comparables + 6 ajustements heuristiques, sans machine learning.
 
-**[App live](https://stta-dvf-production.up.railway.app/)** | **[API Swagger](https://stta-dvf-production.up.railway.app/docs)**
+**[App live](https://stta-dvf-production-c7bc.up.railway.app/)** | **[API Swagger](https://stta-dvf-production-c7bc.up.railway.app/docs)**
 
 ---
 
@@ -73,9 +73,6 @@ streamlit run src/app/streamlit_app.py
 
 # API seule
 uvicorn src.api.main:app --port 8000
-
-# Les deux (comme en prod)
-bash deploy/start.sh
 ```
 
 ---
@@ -93,7 +90,7 @@ bash deploy/start.sh
 ### Exemple minimal
 
 ```bash
-curl -X POST https://stta-dvf-production.up.railway.app/api/v1/estimate \
+curl -X POST https://stta-dvf-production-c7bc.up.railway.app/api/v1/estimate \
   -H "Content-Type: application/json" \
   -d '{
     "address": "25 avenue des Champs-Elysées, Paris",
@@ -115,21 +112,18 @@ La réponse contient 6 sections sélectionnables via le paramètre `include` :
 | `evolution` | Historique semestriel + mensuel avec rolling median 6m |
 | `comparables` | Liste des transactions (lat/lon, distance, zone, prix/m²) |
 
-Documentation complète : **[docs/API.md](docs/API.md)** | **[Swagger](https://stta-dvf-production.up.railway.app/docs)**
+Documentation complète : **[docs/API.md](docs/API.md)** | **[Swagger](https://stta-dvf-production-c7bc.up.railway.app/docs)**
 
 ---
 
 ## Déploiement (Railway)
 
-Le projet se déploie en un seul conteneur Docker sur Railway :
+Le projet se déploie en **2 services Railway** depuis le même repo :
 
-```
-nginx (:$PORT)
-  ├── /           → Streamlit (:8501)
-  ├── /docs       → Swagger UI (:8001)
-  ├── /api/v1/*   → FastAPI (:8001)
-  └── /redoc      → ReDoc (:8001)
-```
+| Service | Dockerfile | Contenu |
+|---------|-----------|---------|
+| **API** | `Dockerfile` | FastAPI + Swagger (`/docs`, `/api/v1/*`) |
+| **Frontend** | `Dockerfile.streamlit` | App Streamlit |
 
 ### Variables d'environnement
 
@@ -182,12 +176,11 @@ docker run --env-file .env -p 8000:8000 stta-dvf
 
 ```
 STTA-DVF/
-├── Dockerfile                 # Image Docker prod (nginx + uvicorn + streamlit)
+├── Dockerfile                 # Image Docker API (FastAPI + uvicorn)
+├── Dockerfile.streamlit       # Image Docker Frontend (Streamlit)
+├── railway.json               # Config Railway (health check)
 ├── requirements.txt           # Dépendances Python (Streamlit + pipeline)
-├── requirements-api.txt       # Dépendances prod (API + Streamlit)
-├── deploy/
-│   ├── nginx.conf.template    # Reverse proxy (/, /api, /docs)
-│   └── start.sh               # Entrypoint conteneur
+├── requirements-api.txt       # Dépendances prod (API seule)
 ├── docs/
 │   └── API.md                 # Documentation API complète
 ├── sql/
