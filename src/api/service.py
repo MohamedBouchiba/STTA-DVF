@@ -12,6 +12,7 @@ from src.estimation.estimator import (
     compute_weighted_median,
     get_zone_stats,
 )
+from src.estimation.appreciation import compute_appreciation
 from src.estimation.confidence import compute_confidence
 from src.estimation.zone_config import ZoneConfig
 from src.app.models.property_input import (
@@ -43,6 +44,20 @@ from src.api.schemas import (
     ComparableItem,
     ComparablesSection,
     VALID_SECTIONS,
+    AppreciationRequest,
+    AppreciationResponse,
+    AppreciationGeocodingSchema,
+    HistoriqueSchema,
+    BenchmarkDeptSchema,
+    SegmentSurfaceSchema,
+    VolatiliteSchema,
+    VolumeSchema,
+    AppreciationSection,
+    ScenarioSchema,
+    ProjectionSchema,
+    ProjectionAnneeSchema,
+    RisqueSchema,
+    ConfidenceAppreciationSchema,
 )
 
 
@@ -391,4 +406,123 @@ def process_estimation(request: EstimationRequest) -> EstimationResponse:
         zone_stats=zone_stats_section,
         evolution=evolution_section,
         comparables=comparables_section,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Appreciation
+# ---------------------------------------------------------------------------
+
+def process_appreciation(request: AppreciationRequest) -> AppreciationResponse:
+    """Traite une requete d'appreciation et retourne la reponse complete."""
+
+    # 1. Geocodage
+    geo = geocode_best(request.address, postcode=request.postcode)
+    if geo is None:
+        return AppreciationResponse(status="geocoding_failed",
+                                    error_detail="Adresse introuvable")
+
+    # 2. Mapper le type_bien vers le type DVF binaire
+    dvf_type = PropertyType(request.type_bien).dvf_type
+
+    # 3. Calcul d'appreciation
+    result = compute_appreciation(
+        code_commune=geo.citycode,
+        type_bien=dvf_type,
+        surface=request.surface,
+        prix_achat=request.prix_achat,
+        dpe_classe=request.dpe_classe,
+        dpe_valeur=request.dpe_valeur,
+        annee_construction=request.annee_construction,
+        etat_copropriete=request.etat_copropriete,
+        zone_tendue=request.zone_tendue,
+        travaux_prevus=request.travaux_prevus,
+        horizon_annees=request.horizon_annees,
+        taux_inflation=request.taux_inflation,
+    )
+
+    # 4. Conversion dataclasses -> Pydantic
+    geocoding = AppreciationGeocodingSchema(
+        commune=geo.city,
+        code_commune=geo.citycode,
+        departement=geo.citycode[:2] if len(geo.citycode) >= 2 else geo.citycode,
+    )
+
+    h = result.historique
+    historique = HistoriqueSchema(
+        cagr_total_pct=h.cagr_total_pct,
+        cagr_3ans_pct=h.cagr_3ans_pct,
+        trend_12m_pct=h.trend_12m_pct,
+        periode_analyse=h.periode_analyse,
+        nb_semestres=h.nb_semestres,
+        source=h.source,
+        benchmark_departement=BenchmarkDeptSchema(
+            cagr_dept_pct=h.benchmark_departement.cagr_dept_pct,
+            surperformance_pct=h.benchmark_departement.surperformance_pct,
+        ) if h.benchmark_departement else None,
+        segment_surface=SegmentSurfaceSchema(
+            tranche=h.segment_surface.tranche,
+            label=h.segment_surface.label,
+            cagr_segment_pct=h.segment_surface.cagr_segment_pct,
+        ) if h.segment_surface else None,
+        volatilite=VolatiliteSchema(
+            coefficient_variation=h.volatilite.coefficient_variation,
+            classification=h.volatilite.classification,
+        ),
+        volume=VolumeSchema(
+            total_transactions=h.volume.total_transactions,
+            last_12m_transactions=h.volume.last_12m_transactions,
+            tendance_volume=h.volume.tendance_volume,
+        ),
+    )
+
+    a = result.appreciation
+    appreciation = AppreciationSection(
+        taux_annuel_estime_pct=a.taux_annuel_estime_pct,
+        ajustements=a.ajustements,
+        taux_final_pct=a.taux_final_pct,
+        methode=a.methode,
+        scenarios={
+            k: ScenarioSchema(taux_pct=v.taux_pct, label=v.label)
+            for k, v in a.scenarios.items()
+        },
+    )
+
+    p = result.projection
+    projection = ProjectionSchema(
+        prix_achat=p.prix_achat,
+        horizon_annees=p.horizon_annees,
+        taux_inflation_pct=p.taux_inflation_pct,
+        annees=[
+            ProjectionAnneeSchema(
+                annee=pa.annee,
+                pessimiste=pa.pessimiste,
+                base=pa.base,
+                optimiste=pa.optimiste,
+            )
+            for pa in p.annees
+        ],
+        plus_value_estimee=p.plus_value_estimee,
+        rendement_annualise_nominal_pct=p.rendement_annualise_nominal_pct,
+        rendement_annualise_reel_pct=p.rendement_annualise_reel_pct,
+    )
+
+    risques = [
+        RisqueSchema(facteur=r.facteur, impact=r.impact, detail=r.detail)
+        for r in result.risques
+    ]
+
+    c = result.confidence
+    confidence = ConfidenceAppreciationSchema(
+        level=c.level, score=c.score, detail=c.detail,
+    )
+
+    return AppreciationResponse(
+        status="ok",
+        geocoding=geocoding,
+        historique=historique,
+        appreciation=appreciation,
+        projection=projection,
+        risques=risques,
+        confidence=confidence,
     )

@@ -2,7 +2,7 @@
 
 Estimateur de prix immobilier pour la France, basé sur les données ouvertes DVF (Demandes de Valeurs Foncières). Méthode : médiane pondérée multi-zones des transactions comparables + 6 ajustements heuristiques, sans machine learning.
 
-**[App live](https://stta-dvf-production-c7bc.up.railway.app/)** | **[API Swagger](https://stta-dvf-production-c7bc.up.railway.app/docs)**
+**[App live](https://stta-dvf-production.up.railway.app/)** | **[API Swagger](https://stta-dvf-production.up.railway.app/docs)**
 
 ---
 
@@ -84,13 +84,14 @@ uvicorn src.api.main:app --port 8000
 | Méthode | URL | Description |
 |---------|-----|-------------|
 | `POST` | `/api/v1/estimate` | Estimation complète |
+| `GET` | `/api/v1/autocomplete` | Autocomplétion d'adresse (BAN) |
 | `GET` | `/api/v1/health` | Health check (DB + PostGIS) |
 | `GET` | `/api/v1/defaults` | Coefficients par défaut |
 
 ### Exemple minimal
 
 ```bash
-curl -X POST https://stta-dvf-production-c7bc.up.railway.app/api/v1/estimate \
+curl -X POST https://stta-dvf-production.up.railway.app/api/v1/estimate \
   -H "Content-Type: application/json" \
   -d '{
     "address": "25 avenue des Champs-Elysées, Paris",
@@ -112,7 +113,7 @@ La réponse contient 6 sections sélectionnables via le paramètre `include` :
 | `evolution` | Historique semestriel + mensuel avec rolling median 6m |
 | `comparables` | Liste des transactions (lat/lon, distance, zone, prix/m²) |
 
-Documentation complète : **[docs/API.md](docs/API.md)** | **[Swagger](https://stta-dvf-production-c7bc.up.railway.app/docs)**
+Documentation complète : **[docs/API.md](docs/API.md)** | **[Swagger](https://stta-dvf-production.up.railway.app/docs)**
 
 ---
 

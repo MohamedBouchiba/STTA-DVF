@@ -245,6 +245,23 @@ class EstimationResponse(BaseModel):
     comparables: ComparablesSection | None = None
 
 
+class AutocompleteItem(BaseModel):
+    """Suggestion d'adresse."""
+
+    label: str
+    street: str | None = None
+    city: str
+    postcode: str
+    latitude: float
+    longitude: float
+
+
+class AutocompleteResponse(BaseModel):
+    """Reponse de l'autocompletion d'adresse."""
+
+    results: list[AutocompleteItem]
+
+
 class HealthResponse(BaseModel):
     """Reponse du health check."""
 
@@ -252,3 +269,163 @@ class HealthResponse(BaseModel):
     database: str
     postgis_version: str | None = None
     transactions_count: int | None = None
+
+
+# ---------------------------------------------------------------------------
+# Appreciation : Request
+# ---------------------------------------------------------------------------
+
+class AppreciationRequest(BaseModel):
+    """Requete d'estimation d'appreciation immobiliere."""
+
+    # --- Obligatoires ---
+    address: str = Field(..., min_length=3)
+    type_bien: str = Field(..., description="appartement, maison, duplex, triplex, loft, hotel_particulier")
+    surface: float = Field(..., gt=0)
+    prix_achat: float = Field(..., gt=0)
+
+    # --- Fortement recommandes ---
+    postcode: str | None = None
+    dpe_classe: str | None = Field(None, pattern=r"^[A-Ga-g]$")
+    nb_pieces: int | None = Field(None, ge=1)
+    annee_construction: int | None = Field(None, ge=1500, le=2030)
+    condition: str | None = None
+    usage_prevu: str | None = None
+
+    # --- Affinent le taux ---
+    dpe_valeur: float | None = Field(None, ge=0)
+    ges_classe: str | None = Field(None, pattern=r"^[A-Ga-g]$")
+    type_chauffage: str | None = None
+    nb_chambres: int | None = Field(None, ge=0)
+    etat_copropriete: str | None = Field(None, description="saine, correcte, en_difficulte")
+    charges_copro_mensuelles: float | None = Field(None, ge=0)
+    zone_tendue: bool | None = None
+    travaux_prevus: float | None = Field(None, ge=0)
+    surface_terrain: float | None = Field(None, gt=0)
+
+    # --- Affinent le prix de depart ---
+    etage: int | None = None
+    nb_etages_immeuble: int | None = Field(None, ge=1)
+    ascenseur: bool | None = None
+    balcon: bool | None = None
+    terrasse: bool | None = None
+    surface_exterieur: float | None = Field(None, ge=0)
+    cave: bool | None = None
+    parking: bool | None = None
+    nb_parkings: int | None = Field(None, ge=0)
+    orientation: str | None = None
+    vue: str | None = None
+    luminosite: str | None = None
+    qualite_prestations: str | None = None
+    type_immeuble: str | None = None
+    ravalement_recent: bool | None = None
+    loyer_mensuel_estime: float | None = Field(None, ge=0)
+
+    # --- Financier ---
+    horizon_annees: int = Field(5, ge=1, le=30)
+    taux_inflation: float = Field(2.0, ge=0, le=20)
+
+
+# ---------------------------------------------------------------------------
+# Appreciation : Response sub-schemas
+# ---------------------------------------------------------------------------
+
+class BenchmarkDeptSchema(BaseModel):
+    cagr_dept_pct: float
+    surperformance_pct: float
+
+
+class SegmentSurfaceSchema(BaseModel):
+    tranche: str
+    label: str
+    cagr_segment_pct: float | None = None
+
+
+class VolatiliteSchema(BaseModel):
+    coefficient_variation: float | None = None
+    classification: str
+
+
+class VolumeSchema(BaseModel):
+    total_transactions: int
+    last_12m_transactions: int
+    tendance_volume: str
+
+
+class HistoriqueSchema(BaseModel):
+    cagr_total_pct: float | None = None
+    cagr_3ans_pct: float | None = None
+    trend_12m_pct: float | None = None
+    periode_analyse: str
+    nb_semestres: int
+    source: str
+    benchmark_departement: BenchmarkDeptSchema | None = None
+    segment_surface: SegmentSurfaceSchema | None = None
+    volatilite: VolatiliteSchema
+    volume: VolumeSchema
+
+
+class ScenarioSchema(BaseModel):
+    taux_pct: float
+    label: str
+
+
+class AppreciationSection(BaseModel):
+    taux_annuel_estime_pct: float
+    ajustements: dict[str, float]
+    taux_final_pct: float
+    methode: str
+    scenarios: dict[str, ScenarioSchema]
+
+
+class ProjectionAnneeSchema(BaseModel):
+    annee: int
+    pessimiste: float
+    base: float
+    optimiste: float
+
+
+class ProjectionSchema(BaseModel):
+    prix_achat: float
+    horizon_annees: int
+    taux_inflation_pct: float
+    annees: list[ProjectionAnneeSchema]
+    plus_value_estimee: dict[str, float]
+    rendement_annualise_nominal_pct: dict[str, float]
+    rendement_annualise_reel_pct: dict[str, float]
+
+
+class RisqueSchema(BaseModel):
+    facteur: str
+    impact: str
+    detail: str
+
+
+class ConfidenceAppreciationSchema(BaseModel):
+    level: str
+    score: int
+    detail: str
+
+
+class AppreciationGeocodingSchema(BaseModel):
+    commune: str
+    code_commune: str
+    departement: str
+
+
+# ---------------------------------------------------------------------------
+# Appreciation : Response
+# ---------------------------------------------------------------------------
+
+class AppreciationResponse(BaseModel):
+    """Reponse complete de l'endpoint d'appreciation."""
+
+    status: str  # "ok" | "geocoding_failed" | "no_data" | "error"
+    error_detail: str | None = None
+
+    geocoding: AppreciationGeocodingSchema | None = None
+    historique: HistoriqueSchema | None = None
+    appreciation: AppreciationSection | None = None
+    projection: ProjectionSchema | None = None
+    risques: list[RisqueSchema] | None = None
+    confidence: ConfidenceAppreciationSchema | None = None

@@ -5,7 +5,18 @@ from dataclasses import dataclass
 import requests
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from src.config import GEOCODING_API_URL
+from src.config import GEOCODING_API_URL, GEOCODING_COMPLETION_URL
+
+
+@dataclass
+class AutocompleteResult:
+    """Resultat d'autocompletion d'adresse."""
+    label: str        # fulltext
+    street: str | None
+    city: str
+    postcode: str
+    latitude: float   # y
+    longitude: float  # x
 
 
 @dataclass
@@ -87,3 +98,42 @@ def geocode_best(address: str, postcode: str | None = None, min_score: float = 0
     if best.score < min_score:
         return None
     return best
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
+def autocomplete(text: str, postcode: str | None = None, limit: int = 5) -> list[AutocompleteResult]:
+    """
+    Autocompletion d'adresse via l'API Geoplateforme Completion.
+
+    Args:
+        text: Texte a completer (min 3 caracteres).
+        postcode: Code postal pour filtrer (optionnel).
+        limit: Nombre max de resultats (1-15).
+
+    Returns:
+        Liste de suggestions d'adresse.
+    """
+    params = {
+        "text": text,
+        "type": "StreetAddress",
+        "maximumResponses": min(limit, 15),
+    }
+    if postcode:
+        params["terr"] = postcode
+
+    resp = requests.get(GEOCODING_COMPLETION_URL, params=params, timeout=10)
+    resp.raise_for_status()
+    data = resp.json()
+
+    results = []
+    for item in data.get("results", []):
+        results.append(AutocompleteResult(
+            label=item.get("fulltext", ""),
+            street=item.get("street"),
+            city=item.get("city", ""),
+            postcode=item.get("zipcode", ""),
+            latitude=item.get("y", 0),
+            longitude=item.get("x", 0),
+        ))
+
+    return results

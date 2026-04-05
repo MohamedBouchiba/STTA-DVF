@@ -11,8 +11,9 @@
 2. [Démarrage rapide](#2-démarrage-rapide)
 3. [Endpoints](#3-endpoints)
    - [GET /api/v1/health](#31-get-apiv1health)
-   - [GET /api/v1/defaults](#32-get-apiv1defaults)
-   - [POST /api/v1/estimate](#33-post-apiv1estimate)
+   - [GET /api/v1/autocomplete](#32-get-apiv1autocomplete)
+   - [GET /api/v1/defaults](#33-get-apiv1defaults)
+   - [POST /api/v1/estimate](#34-post-apiv1estimate)
 4. [Requête d'estimation — Paramètres](#4-requête-destimation--paramètres)
 5. [Réponse d'estimation — Sections](#5-réponse-destimation--sections)
    - [geocoding](#51-geocoding)
@@ -83,14 +84,14 @@ uvicorn src.api.main:app --host 0.0.0.0 --port 8000
 
 Une fois lancée, la documentation Swagger/OpenAPI est disponible à :
 
-- **Swagger UI** : `https://stta-dvf-production-c7bc.up.railway.app/docs`
-- **ReDoc** : `https://stta-dvf-production-c7bc.up.railway.app/redoc`
-- **OpenAPI JSON** : `https://stta-dvf-production-c7bc.up.railway.app/openapi.json`
+- **Swagger UI** : `https://stta-dvf-production.up.railway.app/docs`
+- **ReDoc** : `https://stta-dvf-production.up.railway.app/redoc`
+- **OpenAPI JSON** : `https://stta-dvf-production.up.railway.app/openapi.json`
 
 ### Premier appel
 
 ```bash
-curl -X POST https://stta-dvf-production-c7bc.up.railway.app/api/v1/estimate \
+curl -X POST https://stta-dvf-production.up.railway.app/api/v1/estimate \
   -H "Content-Type: application/json" \
   -d '{"address": "25 avenue des Champs-Elysées, Paris", "property_type": "appartement", "surface": 50}'
 ```
@@ -103,6 +104,7 @@ curl -X POST https://stta-dvf-production-c7bc.up.railway.app/api/v1/estimate \
 |---------|-----|-------------|
 | `GET` | `/` | Redirige vers `/docs` (Swagger UI) |
 | `GET` | `/api/v1/health` | Health check (DB + PostGIS) |
+| `GET` | `/api/v1/autocomplete` | Autocomplétion d'adresse (BAN) |
 | `GET` | `/api/v1/defaults` | Coefficients par défaut |
 | `POST` | `/api/v1/estimate` | Estimation complète |
 
@@ -130,7 +132,53 @@ Vérifie la connexion à la base de données et PostGIS.
 
 ---
 
-### 3.2 GET /api/v1/defaults
+### 3.2 GET /api/v1/autocomplete
+
+Autocomplétion d'adresse en temps réel via l'API Géoplateforme (BAN). Le code postal peut être fourni pour filtrer les résultats.
+
+**Paramètres query** :
+
+| Paramètre | Type | Requis | Description |
+|-----------|------|--------|-------------|
+| `q` | string | Oui | Texte à compléter (min. 3 caractères) |
+| `postcode` | string | Non | Code postal pour filtrer les résultats |
+| `limit` | int | Non | Nombre max de résultats (1-15, défaut: 5) |
+
+**Exemple** :
+
+```bash
+curl "https://stta-dvf-production.up.railway.app/api/v1/autocomplete?q=25+avenue+des+champs&postcode=75008"
+```
+
+**Réponse** :
+
+```json
+{
+  "results": [
+    {
+      "label": "25 Avenue des Champs Elysées, 75008 Paris",
+      "street": "Avenue des Champs Elysées",
+      "city": "Paris",
+      "postcode": "75008",
+      "latitude": 48.869383,
+      "longitude": 2.307725
+    }
+  ]
+}
+```
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| `label` | string | Adresse complète formatée |
+| `street` | string\|null | Nom de la rue |
+| `city` | string | Ville |
+| `postcode` | string | Code postal |
+| `latitude` | float | Latitude (WGS84) |
+| `longitude` | float | Longitude (WGS84) |
+
+---
+
+### 3.3 GET /api/v1/defaults
 
 Retourne tous les coefficients par défaut utilisés pour les ajustements. Utile pour pré-remplir les sliders d'un panneau d'administration frontend.
 
@@ -138,7 +186,7 @@ Retourne tous les coefficients par défaut utilisés pour les ajustements. Utile
 
 ---
 
-### 3.3 POST /api/v1/estimate
+### 3.4 POST /api/v1/estimate
 
 **Endpoint principal.** Prend les paramètres du bien et retourne l'estimation complète.
 
@@ -687,7 +735,7 @@ Le projet est déployé en **2 services Railway** depuis le même repo GitHub :
 
 | Service | Dockerfile | URL de production |
 |---------|-----------|-------------------|
-| **API** | `Dockerfile` | [stta-dvf-production-c7bc.up.railway.app](https://stta-dvf-production-c7bc.up.railway.app) |
+| **API** | `Dockerfile` | [stta-dvf-production.up.railway.app](https://stta-dvf-production.up.railway.app) |
 | **Frontend** | `Dockerfile.streamlit` | Domaine Railway séparé |
 
 ### Variables d'environnement
@@ -881,7 +929,7 @@ Retournés par `GET /api/v1/defaults`. Ces valeurs sont utilisées quand aucun `
 ### Estimation minimale
 
 ```bash
-curl -X POST https://stta-dvf-production-c7bc.up.railway.app/api/v1/estimate \
+curl -X POST https://stta-dvf-production.up.railway.app/api/v1/estimate \
   -H "Content-Type: application/json" \
   -d '{
     "address": "25 avenue des Champs-Elysées, Paris",
@@ -893,7 +941,7 @@ curl -X POST https://stta-dvf-production-c7bc.up.railway.app/api/v1/estimate \
 ### Estimation avec toutes les options
 
 ```bash
-curl -X POST https://stta-dvf-production-c7bc.up.railway.app/api/v1/estimate \
+curl -X POST https://stta-dvf-production.up.railway.app/api/v1/estimate \
   -H "Content-Type: application/json" \
   -d '{
     "address": "15 rue de la Paix, Paris",
@@ -930,7 +978,7 @@ curl -X POST https://stta-dvf-production-c7bc.up.railway.app/api/v1/estimate \
 ### Estimation avec surcharges admin
 
 ```bash
-curl -X POST https://stta-dvf-production-c7bc.up.railway.app/api/v1/estimate \
+curl -X POST https://stta-dvf-production.up.railway.app/api/v1/estimate \
   -H "Content-Type: application/json" \
   -d '{
     "address": "1 avenue du Prado, Marseille",
@@ -950,7 +998,7 @@ curl -X POST https://stta-dvf-production-c7bc.up.railway.app/api/v1/estimate \
 ### Estimation pour carte uniquement
 
 ```bash
-curl -X POST https://stta-dvf-production-c7bc.up.railway.app/api/v1/estimate \
+curl -X POST https://stta-dvf-production.up.railway.app/api/v1/estimate \
   -H "Content-Type: application/json" \
   -d '{
     "address": "1 place de la Bastille, Paris",
@@ -963,7 +1011,7 @@ curl -X POST https://stta-dvf-production-c7bc.up.railway.app/api/v1/estimate \
 ### Graphique d'évolution uniquement
 
 ```bash
-curl -X POST https://stta-dvf-production-c7bc.up.railway.app/api/v1/estimate \
+curl -X POST https://stta-dvf-production.up.railway.app/api/v1/estimate \
   -H "Content-Type: application/json" \
   -d '{
     "address": "12 rue de Rivoli, Paris",

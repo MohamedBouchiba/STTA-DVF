@@ -4,15 +4,20 @@ import os
 import time
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import text
 
 from src.db import get_engine
 from src.app.models.adjustments import get_default_coefficients
-from src.api.schemas import EstimationRequest, EstimationResponse, HealthResponse
-from src.api.service import process_estimation
+from src.api.schemas import (
+    AutocompleteItem, AutocompleteResponse,
+    EstimationRequest, EstimationResponse, HealthResponse,
+    AppreciationRequest, AppreciationResponse,
+)
+from src.api.service import process_estimation, process_appreciation
+from src.estimation.geocoder import autocomplete as geocoder_autocomplete
 
 load_dotenv()
 
@@ -75,6 +80,35 @@ def health():
         )
 
 
+@app.get("/api/v1/autocomplete", response_model=AutocompleteResponse)
+def autocomplete(
+    q: str = Query(..., min_length=3, description="Texte a completer"),
+    postcode: str | None = Query(None, description="Code postal pour filtrer"),
+    limit: int = Query(5, ge=1, le=15, description="Nombre max de resultats"),
+):
+    """Autocompletion d'adresse via l'API Geoplateforme (BAN)."""
+    try:
+        results = geocoder_autocomplete(q, postcode=postcode, limit=limit)
+        return AutocompleteResponse(
+            results=[
+                AutocompleteItem(
+                    label=r.label,
+                    street=r.street,
+                    city=r.city,
+                    postcode=r.postcode,
+                    latitude=r.latitude,
+                    longitude=r.longitude,
+                )
+                for r in results
+            ]
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Erreur autocompletion: {type(e).__name__}: {e}"},
+        )
+
+
 @app.get("/api/v1/defaults")
 def defaults():
     """Retourne les coefficients par defaut (pour les sliders admin frontend)."""
@@ -86,6 +120,28 @@ def estimate(request: EstimationRequest):
     """Endpoint principal d'estimation immobiliere."""
     try:
         return process_estimation(request)
+    except ValueError as e:
+        return JSONResponse(
+            status_code=422,
+            content={"detail": str(e)},
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Erreur interne: {type(e).__name__}: {e}"},
+        )
+
+
+@app.post("/api/v1/appreciation", response_model=AppreciationResponse)
+def appreciation(request: AppreciationRequest):
+    """Estimation d'appreciation immobiliere sur N annees.
+
+    Calcule le taux d'appreciation annuel estime d'un bien en se basant
+    sur l'historique DVF (CAGR, momentum), le DPE, l'annee de construction,
+    et retourne 3 scenarios (pessimiste / base / optimiste) avec projections.
+    """
+    try:
+        return process_appreciation(request)
     except ValueError as e:
         return JSONResponse(
             status_code=422,

@@ -44,6 +44,79 @@ class TestDefaults:
 
 
 # ---------------------------------------------------------------------------
+# Autocomplete
+# ---------------------------------------------------------------------------
+
+class TestAutocomplete:
+    @patch("src.api.main.geocoder_autocomplete")
+    def test_autocomplete_returns_results(self, mock_autocomplete):
+        from src.estimation.geocoder import AutocompleteResult
+        mock_autocomplete.return_value = [
+            AutocompleteResult(
+                label="25 Avenue des Champs Elysees, 75008 Paris",
+                street="Avenue des Champs Elysees",
+                city="Paris",
+                postcode="75008",
+                latitude=48.869383,
+                longitude=2.307725,
+            ),
+        ]
+
+        resp = client.get("/api/v1/autocomplete", params={"q": "25 avenue des champs"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["results"]) == 1
+        assert data["results"][0]["label"] == "25 Avenue des Champs Elysees, 75008 Paris"
+        assert data["results"][0]["city"] == "Paris"
+        assert data["results"][0]["postcode"] == "75008"
+
+    @patch("src.api.main.geocoder_autocomplete")
+    def test_autocomplete_with_postcode(self, mock_autocomplete):
+        from src.estimation.geocoder import AutocompleteResult
+        mock_autocomplete.return_value = [
+            AutocompleteResult(
+                label="25 Avenue des Champs Elysees, 75008 Paris",
+                street="Avenue des Champs Elysees",
+                city="Paris",
+                postcode="75008",
+                latitude=48.869383,
+                longitude=2.307725,
+            ),
+        ]
+
+        resp = client.get("/api/v1/autocomplete", params={"q": "25 avenue des champs", "postcode": "75008"})
+        assert resp.status_code == 200
+        mock_autocomplete.assert_called_once_with("25 avenue des champs", postcode="75008", limit=5)
+
+    def test_autocomplete_too_short(self):
+        """q trop court -> 422."""
+        resp = client.get("/api/v1/autocomplete", params={"q": "ab"})
+        assert resp.status_code == 422
+
+    def test_autocomplete_missing_q(self):
+        """q manquant -> 422."""
+        resp = client.get("/api/v1/autocomplete")
+        assert resp.status_code == 422
+
+    @patch("src.api.main.geocoder_autocomplete")
+    def test_autocomplete_empty(self, mock_autocomplete):
+        mock_autocomplete.return_value = []
+
+        resp = client.get("/api/v1/autocomplete", params={"q": "xyz123456"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["results"] == []
+
+    @patch("src.api.main.geocoder_autocomplete")
+    def test_autocomplete_with_limit(self, mock_autocomplete):
+        mock_autocomplete.return_value = []
+
+        resp = client.get("/api/v1/autocomplete", params={"q": "25 avenue", "limit": 10})
+        assert resp.status_code == 200
+        mock_autocomplete.assert_called_once_with("25 avenue", postcode=None, limit=10)
+
+
+# ---------------------------------------------------------------------------
 # Validation
 # ---------------------------------------------------------------------------
 

@@ -22,6 +22,7 @@ DVF_DEPARTEMENTS = ["13", "75", "77", "78", "91", "92", "93", "94", "95"]
 
 # Geocodage
 GEOCODING_API_URL = os.getenv("GEOCODING_API_URL", "https://data.geopf.fr/geocodage/search")
+GEOCODING_COMPLETION_URL = os.getenv("GEOCODING_COMPLETION_URL", "https://data.geopf.fr/geocodage/completion/")
 GEOCODING_RATE_LIMIT = int(os.getenv("GEOCODING_RATE_LIMIT", "40"))
 
 # Estimation
