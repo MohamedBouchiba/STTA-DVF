@@ -1,9 +1,12 @@
 """Geocodage d'adresses via l'API Geoplateforme (ex-BAN)."""
 
+import logging
 from dataclasses import dataclass
 
 import requests
 from tenacity import retry, stop_after_attempt, wait_exponential
+
+logger = logging.getLogger(__name__)
 
 from src.config import GEOCODING_API_URL, GEOCODING_COMPLETION_URL
 
@@ -91,7 +94,11 @@ def geocode_best(address: str, postcode: str | None = None, min_score: float = 0
     Returns:
         Le meilleur resultat ou None.
     """
-    results = geocode(address, limit=1, postcode=postcode)
+    try:
+        results = geocode(address, limit=1, postcode=postcode)
+    except Exception as exc:
+        logger.warning("Geocodage echoue pour '%s': %s", address, exc)
+        return None
     if not results:
         return None
     best = results[0]
