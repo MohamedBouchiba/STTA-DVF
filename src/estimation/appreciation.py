@@ -81,7 +81,7 @@ class Appreciation:
 class ProjectionAnnee:
     annee: int
     pessimiste: float
-    base: float
+    pragmatique: float
     optimiste: float
 
 
@@ -129,27 +129,27 @@ DPE_ADJUSTMENT: dict[str, float] = {
     "B": 0.3,
     "C": 0.1,
     "D": 0.0,
-    "E": -0.3,
-    "F": -0.8,
-    "G": -1.5,
+    "E": -0.15,   # Interdiction location 2034 — impact modere
+    "F": -0.4,    # Interdiction 2028 — penalite reelle mais pas ecrasante
+    "G": -0.8,    # Deja interdit location — reste habitable en RP
 }
 
 # Ajustement annee de construction
 CONSTRUCTION_ADJUSTMENT: dict[str, float] = {
     "avant_1850": 0.15,   # Haussmannien / pierre — prime patrimoniale
     "1850_1913": 0.1,
-    "1914_1947": -0.05,
-    "1948_1969": -0.15,   # Grands ensembles, beton vieillissant
-    "1970_1989": -0.1,
+    "1914_1947": 0.0,     # Neutre — pas de raison de penaliser
+    "1948_1969": -0.05,   # Grands ensembles — reduit (beaucoup renoves)
+    "1970_1989": -0.05,   # Reduit
     "1990_2005": 0.0,
     "apres_2005": 0.1,    # RT2005+, bien isole
 }
 
 # Etat copropriete
 COPRO_ADJUSTMENT: dict[str, float] = {
-    "saine": 0.0,
-    "correcte": -0.1,
-    "en_difficulte": -0.5,
+    "saine": 0.1,           # Bonus immeuble bien gere
+    "correcte": 0.0,        # Neutre — cas normal
+    "en_difficulte": -0.3,  # Penalite moderee
 }
 
 # Seuils de surface pour segmentation
@@ -509,8 +509,8 @@ def compute_appreciation(
     if trend_12m is not None:
         # Mean-reversion : plafonner trend_12m si trop eloigne du CAGR
         trend_capped = trend_12m
-        if cagr_total is not None and abs(trend_12m - cagr_total) > 5.0:
-            trend_capped = cagr_total + 5.0 * (1 if trend_12m > cagr_total else -1)
+        if cagr_total is not None and abs(trend_12m - cagr_total) > 8.0:
+            trend_capped = cagr_total + 8.0 * (1 if trend_12m > cagr_total else -1)
         components.append(trend_capped)
         weights.append(0.20)
     elif cagr_total is not None:
@@ -549,7 +549,7 @@ def compute_appreciation(
 
     # Zone tendue
     if zone_tendue:
-        ajustements["zone_tendue"] = 0.2
+        ajustements["zone_tendue"] = 0.3
 
     # Travaux prevus (bonus si ameliore le DPE)
     if travaux_prevus and travaux_prevus > 0 and prix_achat > 0:
@@ -587,7 +587,7 @@ def compute_appreciation(
             taux_pct=taux_pessimiste,
             label="Marche en ralentissement",
         ),
-        "base": Scenario(
+        "pragmatique": Scenario(
             taux_pct=taux_final,
             label="Tendance historique maintenue",
         ),
@@ -605,7 +605,7 @@ def compute_appreciation(
         annees.append(ProjectionAnnee(
             annee=n,
             pessimiste=round(prix_achat * (1 + taux_pessimiste / 100) ** n),
-            base=round(prix_achat * (1 + taux_final / 100) ** n),
+            pragmatique=round(prix_achat * (1 + taux_final / 100) ** n),
             optimiste=round(prix_achat * (1 + taux_optimiste / 100) ** n),
         ))
 
@@ -613,19 +613,19 @@ def compute_appreciation(
     h = horizon_annees
     pv = {
         "pessimiste": round(prix_achat * (1 + taux_pessimiste / 100) ** h - prix_achat),
-        "base": round(prix_achat * (1 + taux_final / 100) ** h - prix_achat),
+        "pragmatique": round(prix_achat * (1 + taux_final / 100) ** h - prix_achat),
         "optimiste": round(prix_achat * (1 + taux_optimiste / 100) ** h - prix_achat),
     }
 
     rdt_nominal = {
         "pessimiste": taux_pessimiste,
-        "base": taux_final,
+        "pragmatique": taux_final,
         "optimiste": taux_optimiste,
     }
 
     rdt_reel = {
         "pessimiste": round(taux_pessimiste - taux_inflation, 1),
-        "base": round(taux_final - taux_inflation, 1),
+        "pragmatique": round(taux_final - taux_inflation, 1),
         "optimiste": round(taux_optimiste - taux_inflation, 1),
     }
 

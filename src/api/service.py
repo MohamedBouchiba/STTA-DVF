@@ -497,7 +497,7 @@ def process_appreciation(request: AppreciationRequest) -> AppreciationResponse:
             ProjectionAnneeSchema(
                 annee=pa.annee,
                 pessimiste=pa.pessimiste,
-                base=pa.base,
+                pragmatique=pa.pragmatique,
                 optimiste=pa.optimiste,
             )
             for pa in p.annees

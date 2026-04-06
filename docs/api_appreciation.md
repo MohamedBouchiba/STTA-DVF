@@ -2,7 +2,7 @@
 
 Estimation d'appreciation immobiliere sur N annees.
 
-Calcule le taux d'appreciation annuel estime d'un bien en se basant sur l'historique DVF (CAGR, momentum), le DPE, l'annee de construction, et retourne 3 scenarios (pessimiste / base / optimiste) avec projections annuelles.
+Calcule le taux d'appreciation annuel estime d'un bien en se basant sur l'historique DVF (CAGR, momentum), le DPE, l'annee de construction, et retourne 3 scenarios (pessimiste / pragmatique / optimiste) avec projections annuelles.
 
 ---
 
@@ -20,16 +20,16 @@ Le moteur combine 3 niveaux d'analyse :
 taux_base = 0.50 x CAGR_total + 0.30 x CAGR_3ans + 0.20 x trend_12m
 ```
 
-Avec mean-reversion : si `trend_12m` s'ecarte de plus de 5 points du CAGR total, il est plafonne.
+Avec mean-reversion : si `trend_12m` s'ecarte de plus de 8 points du CAGR total, il est plafonne.
 
 ### Ajustements appliques au taux
 
 | Facteur | Valeurs possibles | Impact annuel |
 |---------|-------------------|---------------|
-| **DPE** | A: +0.5%, B: +0.3%, C: +0.1%, D: 0%, E: -0.3%, F: -0.8%, G: -1.5% | Loi Climat & Resilience |
-| **Construction** | avant 1850: +0.15%, 1850-1913: +0.1%, 1914-1947: -0.05%, 1948-1969: -0.15%, 1970-1989: -0.1%, 1990-2005: 0%, apres 2005: +0.1% | Prime patrimoniale / depreciation beton |
-| **Copropriete** | saine: 0%, correcte: -0.1%, en_difficulte: -0.5% | Impact sur valeur future |
-| **Zone tendue** | true: +0.2% | Pression haussiere demande locative |
+| **DPE** | A: +0.5%, B: +0.3%, C: +0.1%, D: 0%, E: -0.15%, F: -0.4%, G: -0.8% | Loi Climat & Resilience |
+| **Construction** | avant 1850: +0.15%, 1850-1913: +0.1%, 1914-1947: 0%, 1948-1969: -0.05%, 1970-1989: -0.05%, 1990-2005: 0%, apres 2005: +0.1% | Prime patrimoniale / depreciation beton |
+| **Copropriete** | saine: +0.1%, correcte: 0%, en_difficulte: -0.3% | Impact sur valeur future |
+| **Zone tendue** | true: +0.3% | Pression haussiere demande locative |
 | **Travaux** | proportionnel au ratio travaux/prix (max +0.5%) | Amelioration DPE post-travaux |
 
 ### Scenarios
@@ -238,7 +238,7 @@ optimiste  = taux_final + spread
 | `ajustements` | dict | Ajustements appliques (cle: facteur, valeur: impact en pp) |
 | `taux_final_pct` | float | Taux apres tous les ajustements (%) |
 | `methode` | string | Methode utilisee (`"weighted_cagr_momentum"`) |
-| `scenarios` | dict | 3 scenarios : `pessimiste`, `base`, `optimiste` |
+| `scenarios` | dict | 3 scenarios : `pessimiste`, `pragmatique`, `optimiste` |
 | `scenarios.*.taux_pct` | float | Taux du scenario (%) |
 | `scenarios.*.label` | string | Description du scenario |
 
@@ -252,7 +252,7 @@ optimiste  = taux_final + spread
 | `annees` | array | Projection annee par annee |
 | `annees[].annee` | int | Numero de l'annee (1 a N) |
 | `annees[].pessimiste` | float | Valeur estimee scenario pessimiste (euros) |
-| `annees[].base` | float | Valeur estimee scenario base (euros) |
+| `annees[].pragmatique` | float | Valeur estimee scenario pragmatique (euros) |
 | `annees[].optimiste` | float | Valeur estimee scenario optimiste (euros) |
 | `plus_value_estimee` | dict | Plus-value a l'horizon par scenario (euros) |
 | `rendement_annualise_nominal_pct` | dict | Rendement nominal par scenario (%) |
@@ -334,7 +334,7 @@ Le score de confiance est calcule a partir de :
         "taux_pct": -4.1,
         "label": "Marche en ralentissement"
       },
-      "base": {
+      "pragmatique": {
         "taux_pct": -2.61,
         "label": "Tendance historique maintenue"
       },
@@ -349,25 +349,25 @@ Le score de confiance est calcule a partir de :
     "horizon_annees": 5,
     "taux_inflation_pct": 2.0,
     "annees": [
-      { "annee": 1, "pessimiste": 431550, "base": 438255, "optimiste": 445050 },
-      { "annee": 2, "pessimiste": 413856, "base": 426817, "optimiste": 440154 },
-      { "annee": 3, "pessimiste": 396888, "base": 415677, "optimiste": 435313 },
-      { "annee": 4, "pessimiste": 380616, "base": 404827, "optimiste": 430524 },
-      { "annee": 5, "pessimiste": 365011, "base": 394261, "optimiste": 425789 }
+      { "annee": 1, "pessimiste": 431550, "pragmatique": 438255, "optimiste": 445050 },
+      { "annee": 2, "pessimiste": 413856, "pragmatique": 426817, "optimiste": 440154 },
+      { "annee": 3, "pessimiste": 396888, "pragmatique": 415677, "optimiste": 435313 },
+      { "annee": 4, "pessimiste": 380616, "pragmatique": 404827, "optimiste": 430524 },
+      { "annee": 5, "pessimiste": 365011, "pragmatique": 394261, "optimiste": 425789 }
     ],
     "plus_value_estimee": {
       "pessimiste": -84989,
-      "base": -55739,
+      "pragmatique": -55739,
       "optimiste": -24211
     },
     "rendement_annualise_nominal_pct": {
       "pessimiste": -4.1,
-      "base": -2.61,
+      "pragmatique": -2.61,
       "optimiste": -1.1
     },
     "rendement_annualise_reel_pct": {
       "pessimiste": -6.1,
-      "base": -4.6,
+      "pragmatique": -4.6,
       "optimiste": -3.1
     }
   },

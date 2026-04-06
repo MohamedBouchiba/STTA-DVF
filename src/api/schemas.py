@@ -381,7 +381,7 @@ class AppreciationSection(BaseModel):
 class ProjectionAnneeSchema(BaseModel):
     annee: int
     pessimiste: float
-    base: float
+    pragmatique: float
     optimiste: float
 
 

@@ -195,13 +195,13 @@ class TestComputeAppreciation:
 
         assert result.appreciation.taux_final_pct is not None
         assert "pessimiste" in result.appreciation.scenarios
-        assert "base" in result.appreciation.scenarios
+        assert "pragmatique" in result.appreciation.scenarios
         assert "optimiste" in result.appreciation.scenarios
 
         pess = result.appreciation.scenarios["pessimiste"].taux_pct
-        base = result.appreciation.scenarios["base"].taux_pct
+        pragmatique = result.appreciation.scenarios["pragmatique"].taux_pct
         opti = result.appreciation.scenarios["optimiste"].taux_pct
-        assert pess < base < opti
+        assert pess < pragmatique < opti
 
         assert result.projection.prix_achat == 350000
         assert result.projection.horizon_annees == 5
@@ -331,7 +331,7 @@ class TestComputeAppreciation:
         # Le scenario base devrait etre positif avec nos donnees
         if result.appreciation.taux_final_pct > 0:
             for i in range(len(result.projection.annees) - 1):
-                assert result.projection.annees[i + 1].base > result.projection.annees[i].base
+                assert result.projection.annees[i + 1].pragmatique > result.projection.annees[i].pragmatique
 
     @patch("src.estimation.appreciation._get_segment_cagr")
     @patch("src.estimation.appreciation._get_zone_stats")
@@ -396,22 +396,22 @@ class TestAppreciationEndpoint:
                 taux_final_pct=2.1, methode="weighted_cagr_momentum",
                 scenarios={
                     "pessimiste": Scenario(taux_pct=0.5, label="Marche en ralentissement"),
-                    "base": Scenario(taux_pct=2.1, label="Tendance historique maintenue"),
+                    "pragmatique": Scenario(taux_pct=2.1, label="Tendance historique maintenue"),
                     "optimiste": Scenario(taux_pct=3.7, label="Acceleration du marche"),
                 },
             ),
             projection=Projection(
                 prix_achat=350000, horizon_annees=5, taux_inflation_pct=2.0,
                 annees=[
-                    ProjectionAnnee(annee=1, pessimiste=351750, base=357350, optimiste=362950),
-                    ProjectionAnnee(annee=2, pessimiste=353509, base=364852, optimiste=376381),
-                    ProjectionAnnee(annee=3, pessimiste=355277, base=372512, optimiste=390309),
-                    ProjectionAnnee(annee=4, pessimiste=357053, base=380334, optimiste=404750),
-                    ProjectionAnnee(annee=5, pessimiste=358838, base=388321, optimiste=419722),
+                    ProjectionAnnee(annee=1, pessimiste=351750, pragmatique=357350, optimiste=362950),
+                    ProjectionAnnee(annee=2, pessimiste=353509, pragmatique=364852, optimiste=376381),
+                    ProjectionAnnee(annee=3, pessimiste=355277, pragmatique=372512, optimiste=390309),
+                    ProjectionAnnee(annee=4, pessimiste=357053, pragmatique=380334, optimiste=404750),
+                    ProjectionAnnee(annee=5, pessimiste=358838, pragmatique=388321, optimiste=419722),
                 ],
-                plus_value_estimee={"pessimiste": 8838, "base": 38321, "optimiste": 69722},
-                rendement_annualise_nominal_pct={"pessimiste": 0.5, "base": 2.1, "optimiste": 3.7},
-                rendement_annualise_reel_pct={"pessimiste": -1.5, "base": 0.1, "optimiste": 1.7},
+                plus_value_estimee={"pessimiste": 8838, "pragmatique": 38321, "optimiste": 69722},
+                rendement_annualise_nominal_pct={"pessimiste": 0.5, "pragmatique": 2.1, "optimiste": 3.7},
+                rendement_annualise_reel_pct={"pessimiste": -1.5, "pragmatique": 0.1, "optimiste": 1.7},
             ),
             risques=[
                 Risque(facteur="volatilite", impact="faible", detail="CV 0.12 — marche stable"),
@@ -497,20 +497,20 @@ class TestAppreciationEndpoint:
                 volume=Volume(total_transactions=100, last_12m_transactions=20, tendance_volume="stable"),
             ),
             appreciation=Appreciation(
-                taux_annuel_estime_pct=1.5, ajustements={"dpe": -1.5, "construction": -0.15},
-                taux_final_pct=-0.15, methode="weighted_cagr_momentum",
+                taux_annuel_estime_pct=1.5, ajustements={"dpe": -0.8, "construction": -0.05},
+                taux_final_pct=0.65, methode="weighted_cagr_momentum",
                 scenarios={
                     "pessimiste": Scenario(taux_pct=-2.0, label="Marche en ralentissement"),
-                    "base": Scenario(taux_pct=-0.15, label="Tendance historique maintenue"),
+                    "pragmatique": Scenario(taux_pct=-0.15, label="Tendance historique maintenue"),
                     "optimiste": Scenario(taux_pct=1.7, label="Acceleration du marche"),
                 },
             ),
             projection=Projection(
                 prix_achat=200000, horizon_annees=10, taux_inflation_pct=2.0,
-                annees=[ProjectionAnnee(annee=i, pessimiste=200000-i*2000, base=200000-i*300, optimiste=200000+i*3000) for i in range(1, 11)],
-                plus_value_estimee={"pessimiste": -20000, "base": -3000, "optimiste": 30000},
-                rendement_annualise_nominal_pct={"pessimiste": -2.0, "base": -0.15, "optimiste": 1.7},
-                rendement_annualise_reel_pct={"pessimiste": -4.0, "base": -2.15, "optimiste": -0.3},
+                annees=[ProjectionAnnee(annee=i, pessimiste=200000-i*2000, pragmatique=200000-i*300, optimiste=200000+i*3000) for i in range(1, 11)],
+                plus_value_estimee={"pessimiste": -20000, "pragmatique": -3000, "optimiste": 30000},
+                rendement_annualise_nominal_pct={"pessimiste": -2.0, "pragmatique": -0.15, "optimiste": 1.7},
+                rendement_annualise_reel_pct={"pessimiste": -4.0, "pragmatique": -2.15, "optimiste": -0.3},
             ),
             risques=[
                 Risque(facteur="dpe", impact="eleve", detail="DPE G — deja interdit en location"),
@@ -549,7 +549,7 @@ class TestAppreciationEndpoint:
         data = resp.json()
         assert data["status"] == "ok"
         assert len(data["projection"]["annees"]) == 10
-        assert data["appreciation"]["ajustements"]["dpe"] == -1.5
+        assert data["appreciation"]["ajustements"]["dpe"] == -0.8
 
 
 # ---------------------------------------------------------------------------
@@ -584,8 +584,8 @@ class TestIntegrationAppreciation:
         a = data["appreciation"]
         assert a["taux_final_pct"] is not None
         assert a["methode"] == "weighted_cagr_momentum"
-        assert a["scenarios"]["pessimiste"]["taux_pct"] < a["scenarios"]["base"]["taux_pct"]
-        assert a["scenarios"]["base"]["taux_pct"] < a["scenarios"]["optimiste"]["taux_pct"]
+        assert a["scenarios"]["pessimiste"]["taux_pct"] < a["scenarios"]["pragmatique"]["taux_pct"]
+        assert a["scenarios"]["pragmatique"]["taux_pct"] < a["scenarios"]["optimiste"]["taux_pct"]
 
         # Projection
         p = data["projection"]
