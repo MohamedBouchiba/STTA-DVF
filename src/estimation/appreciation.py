@@ -4,7 +4,7 @@ Calcule le taux d'appreciation annuel d'un bien en se basant sur :
 1. CAGR historique de la commune (donnees DVF)
 2. Momentum recent (trend_12m)
 3. Ajustements : DPE, construction, copropriete
-4. Scenarios pessimiste / base / optimiste
+4. Scenarios pessimiste / pragmatique / optimiste
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
+import numpy as np
 import pandas as pd
 from sqlalchemy import text
 
@@ -156,6 +157,9 @@ COPRO_ADJUSTMENT: dict[str, float] = {
 SURFACE_PETIT = 40.0
 SURFACE_GRAND = 80.0
 
+# Seuil minimum de transactions par semestre pour la regression
+MIN_SEM_TRANSACTIONS = 5
+
 
 # ---------------------------------------------------------------------------
 # Fonctions utilitaires
@@ -168,6 +172,51 @@ def _compute_cagr(first_value: float, last_value: float, nb_years: float) -> flo
     ratio = last_value / first_value
     cagr = (ratio ** (1.0 / nb_years)) - 1.0
     return round(cagr * 100, 2)
+
+
+def _compute_cagr_regression(
+    df: pd.DataFrame,
+    *,
+    min_transactions: int = MIN_SEM_TRANSACTIONS,
+    decay_rate: float = 0.85,
+) -> float | None:
+    """CAGR via regression log-lineaire ponderee sur medianes semestrielles.
+
+    Utilise tous les semestres (pas juste premier/dernier) pour un resultat
+    plus robuste aux valeurs aberrantes. Les semestres recents pesent plus.
+
+    Args:
+        df: DataFrame avec colonnes annee, semestre, nb_transactions, median_prix_m2.
+        min_transactions: Seuil minimum de transactions par semestre.
+        decay_rate: Facteur de decroissance exponentielle par an (0.85 = -15%/an).
+
+    Returns:
+        CAGR en %, ou None si donnees insuffisantes.
+    """
+    # Filtrer les semestres de mauvaise qualite
+    df_clean = df[df["nb_transactions"] >= min_transactions].copy()
+    if len(df_clean) < 2:
+        return None
+
+    df_clean = df_clean[df_clean["median_prix_m2"] > 0]
+    if len(df_clean) < 2:
+        return None
+
+    # Axe temporel : 2020-S1 = 2020.0, 2020-S2 = 2020.5
+    times = (df_clean["annee"] + (df_clean["semestre"] - 1) * 0.5).values.astype(float)
+    log_prices = np.log(df_clean["median_prix_m2"].values.astype(float))
+
+    # Ponderation exponentielle : semestres recents pesent plus
+    max_t = times.max()
+    weights = decay_rate ** (max_t - times)
+
+    # np.polyfit w : minimise sum(w_i^2 * residual_i^2)
+    # Pour obtenir une ponderation proportionnelle a weights, passer sqrt(weights)
+    slope, _ = np.polyfit(times, log_prices, 1, w=np.sqrt(weights))
+
+    # slope = d(log(prix))/d(annee) => exp(slope) - 1 = taux de croissance annuel
+    cagr = (np.exp(slope) - 1.0) * 100
+    return round(cagr, 2)
 
 
 def _surface_segment(surface: float) -> tuple[str, str]:
@@ -318,13 +367,8 @@ def _get_segment_cagr(
     if len(df) < 2:
         return None
 
-    first_val = float(df.iloc[0]["median_prix_m2"])
-    last_val = float(df.iloc[-1]["median_prix_m2"])
-    first_sem = df.iloc[0]["annee"] + (df.iloc[0]["semestre"] - 1) * 0.5
-    last_sem = df.iloc[-1]["annee"] + (df.iloc[-1]["semestre"] - 1) * 0.5
-    nb_years = last_sem - first_sem
-
-    return _compute_cagr(first_val, last_val, nb_years)
+    df = df.rename(columns={"nb": "nb_transactions"})
+    return _compute_cagr_regression(df, min_transactions=5)
 
 
 # ---------------------------------------------------------------------------
@@ -377,24 +421,16 @@ def compute_appreciation(
     nb_semestres = len(df_sem)
 
     if nb_semestres >= 2:
-        first_val = float(df_sem.iloc[0]["median_prix_m2"])
-        last_val = float(df_sem.iloc[-1]["median_prix_m2"])
-        first_t = df_sem.iloc[0]["annee"] + (df_sem.iloc[0]["semestre"] - 1) * 0.5
-        last_t = df_sem.iloc[-1]["annee"] + (df_sem.iloc[-1]["semestre"] - 1) * 0.5
-        nb_years = last_t - first_t
-        cagr_total = _compute_cagr(first_val, last_val, nb_years)
+        cagr_total = _compute_cagr_regression(df_sem)
 
-        # CAGR 3 ans
+        # CAGR 3 ans (decay plus doux car fenetre deja courte)
+        last_t = (df_sem["annee"] + (df_sem["semestre"] - 1) * 0.5).max()
         target_t = last_t - 3.0
         df_recent = df_sem[
             (df_sem["annee"] + (df_sem["semestre"] - 1) * 0.5) >= target_t
         ]
         if len(df_recent) >= 2:
-            first_3 = float(df_recent.iloc[0]["median_prix_m2"])
-            last_3 = float(df_recent.iloc[-1]["median_prix_m2"])
-            t0 = df_recent.iloc[0]["annee"] + (df_recent.iloc[0]["semestre"] - 1) * 0.5
-            t1 = df_recent.iloc[-1]["annee"] + (df_recent.iloc[-1]["semestre"] - 1) * 0.5
-            cagr_3ans = _compute_cagr(first_3, last_3, t1 - t0)
+            cagr_3ans = _compute_cagr_regression(df_recent, decay_rate=0.90)
 
     trend_12m = zone_stats["trend_12m"] if zone_stats else None
 
@@ -415,11 +451,7 @@ def compute_appreciation(
     if source == "commune":
         df_dept = _get_dept_semester_data(code_dept, type_bien)
         if len(df_dept) >= 2:
-            dept_first = float(df_dept.iloc[0]["median_prix_m2"])
-            dept_last = float(df_dept.iloc[-1]["median_prix_m2"])
-            dt0 = df_dept.iloc[0]["annee"] + (df_dept.iloc[0]["semestre"] - 1) * 0.5
-            dt1 = df_dept.iloc[-1]["annee"] + (df_dept.iloc[-1]["semestre"] - 1) * 0.5
-            cagr_dept = _compute_cagr(dept_first, dept_last, dt1 - dt0)
+            cagr_dept = _compute_cagr_regression(df_dept)
             if cagr_dept is not None and cagr_total is not None:
                 benchmark = BenchmarkDept(
                     cagr_dept_pct=cagr_dept,
@@ -566,7 +598,7 @@ def compute_appreciation(
         taux_annuel_estime_pct=round(taux_base, 2),
         ajustements=ajustements,
         taux_final_pct=taux_final,
-        methode="weighted_cagr_momentum",
+        methode="weighted_loglinear_regression",
         scenarios={},  # Rempli ci-dessous
     )
 

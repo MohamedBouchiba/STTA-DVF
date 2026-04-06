@@ -138,7 +138,7 @@ def appreciation(request: AppreciationRequest):
 
     Calcule le taux d'appreciation annuel estime d'un bien en se basant
     sur l'historique DVF (CAGR, momentum), le DPE, l'annee de construction,
-    et retourne 3 scenarios (pessimiste / base / optimiste) avec projections.
+    et retourne 3 scenarios (pessimiste / pragmatique / optimiste) avec projections.
     """
     try:
         return process_appreciation(request)

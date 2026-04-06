@@ -14,6 +14,19 @@ Le moteur combine 3 niveaux d'analyse :
 2. **Segment de bien (~15%)** — Appartement vs maison, tranche de surface (petit <40m², moyen 40-80m², grand >80m²)
 3. **Caracteristiques propres (~5%)** — DPE (Loi Climat), annee de construction, etat copropriete
 
+### Calcul du CAGR (regression log-lineaire ponderee)
+
+Chaque CAGR (total, 3 ans, segment) est calcule par **regression log-lineaire ponderee** sur les medianes semestrielles :
+
+```
+log(prix_m2) = slope x t + intercept
+CAGR = (exp(slope) - 1) x 100
+```
+
+- **Filtrage** : seuls les semestres avec >= 5 transactions sont inclus
+- **Ponderation temporelle** : decay exponentiel (0.85/an) — un semestre d'il y a 5 ans pese ~44% d'un semestre recent
+- **Robustesse** : utilise tous les points, pas juste premier/dernier — moins sensible aux valeurs aberrantes
+
 ### Formule du taux de base
 
 ```
@@ -237,7 +250,7 @@ optimiste  = taux_final + spread
 | `taux_annuel_estime_pct` | float | Taux de base avant ajustements (%) |
 | `ajustements` | dict | Ajustements appliques (cle: facteur, valeur: impact en pp) |
 | `taux_final_pct` | float | Taux apres tous les ajustements (%) |
-| `methode` | string | Methode utilisee (`"weighted_cagr_momentum"`) |
+| `methode` | string | Methode utilisee (`"weighted_loglinear_regression"`) |
 | `scenarios` | dict | 3 scenarios : `pessimiste`, `pragmatique`, `optimiste` |
 | `scenarios.*.taux_pct` | float | Taux du scenario (%) |
 | `scenarios.*.label` | string | Description du scenario |
@@ -328,7 +341,7 @@ Le score de confiance est calcule a partir de :
       "construction": -0.05
     },
     "taux_final_pct": -2.61,
-    "methode": "weighted_cagr_momentum",
+    "methode": "weighted_loglinear_regression",
     "scenarios": {
       "pessimiste": {
         "taux_pct": -4.1,

@@ -9,12 +9,14 @@ from fastapi.testclient import TestClient
 from src.api.main import app
 from src.estimation.appreciation import (
     _compute_cagr,
+    _compute_cagr_regression,
     _surface_segment,
     _construction_period_key,
     compute_appreciation,
     DPE_ADJUSTMENT,
     CONSTRUCTION_ADJUSTMENT,
     COPRO_ADJUSTMENT,
+    MIN_SEM_TRANSACTIONS,
 )
 
 client = TestClient(app)
@@ -114,6 +116,85 @@ class TestConstants:
         classes = ["A", "B", "C", "D", "E", "F", "G"]
         for i in range(len(classes) - 1):
             assert DPE_ADJUSTMENT[classes[i]] >= DPE_ADJUSTMENT[classes[i + 1]]
+
+
+class TestComputeCagrRegression:
+    def test_steady_growth(self):
+        """Donnees monotones croissantes -> CAGR positif."""
+        df = _make_semester_df()
+        cagr = _compute_cagr_regression(df)
+        assert cagr is not None
+        assert cagr > 0
+
+    def test_too_few_semesters(self):
+        """Moins de 2 semestres valides -> None."""
+        df = pd.DataFrame({
+            "annee": [2024], "semestre": [1],
+            "nb_transactions": [50], "median_prix_m2": [5000],
+            "q1_prix_m2": [4500], "q3_prix_m2": [5500],
+        })
+        assert _compute_cagr_regression(df) is None
+
+    def test_filters_low_transactions(self):
+        """Semestres avec trop peu de transactions sont exclus."""
+        df = _make_semester_df()
+        # Mettre tous les semestres sauf le dernier a nb_transactions=2
+        df.loc[:8, "nb_transactions"] = 2
+        # Un seul semestre valide -> None
+        assert _compute_cagr_regression(df) is None
+
+    def test_two_valid_semesters(self):
+        """Exactement 2 semestres valides -> resultat."""
+        df = pd.DataFrame({
+            "annee": [2023, 2024], "semestre": [1, 1],
+            "nb_transactions": [30, 40],
+            "median_prix_m2": [5000, 5200],
+            "q1_prix_m2": [4500, 4700], "q3_prix_m2": [5500, 5700],
+        })
+        cagr = _compute_cagr_regression(df)
+        assert cagr is not None
+        assert cagr > 0  # prix en hausse
+
+    def test_declining_market(self):
+        """Prix en baisse -> CAGR negatif."""
+        rows = []
+        for i, (annee, sem) in enumerate([
+            (2020, 1), (2020, 2), (2021, 1), (2021, 2),
+            (2022, 1), (2022, 2),
+        ]):
+            rows.append({
+                "annee": annee, "semestre": sem,
+                "nb_transactions": 50,
+                "median_prix_m2": 6000 - i * 100,
+                "q1_prix_m2": 5500 - i * 100,
+                "q3_prix_m2": 6500 - i * 100,
+            })
+        df = pd.DataFrame(rows)
+        cagr = _compute_cagr_regression(df)
+        assert cagr is not None
+        assert cagr < 0
+
+    def test_noisy_endpoint_robustness(self):
+        """Un dernier semestre aberrant ne domine pas la regression."""
+        df = _make_semester_df()
+        # Corrompre le dernier semestre avec un spike
+        df.loc[df.index[-1], "median_prix_m2"] = 8000
+        cagr_noisy = _compute_cagr_regression(df)
+
+        # L'ancien first/last donnerait (8000/5000)^(1/4.5)-1 = ~10.8%
+        # La regression doit etre beaucoup plus moderee
+        assert cagr_noisy is not None
+        assert cagr_noisy < 8.0
+
+    def test_custom_decay_rate(self):
+        """decay_rate=1.0 (pas de decay) doit aussi fonctionner."""
+        df = _make_semester_df()
+        cagr_default = _compute_cagr_regression(df, decay_rate=0.85)
+        cagr_no_decay = _compute_cagr_regression(df, decay_rate=1.0)
+        assert cagr_default is not None
+        assert cagr_no_decay is not None
+        # Les deux doivent etre positifs et proches
+        assert abs(cagr_default - cagr_no_decay) < 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -393,7 +474,7 @@ class TestAppreciationEndpoint:
             ),
             appreciation=Appreciation(
                 taux_annuel_estime_pct=2.1, ajustements={},
-                taux_final_pct=2.1, methode="weighted_cagr_momentum",
+                taux_final_pct=2.1, methode="weighted_loglinear_regression",
                 scenarios={
                     "pessimiste": Scenario(taux_pct=0.5, label="Marche en ralentissement"),
                     "pragmatique": Scenario(taux_pct=2.1, label="Tendance historique maintenue"),
@@ -498,7 +579,7 @@ class TestAppreciationEndpoint:
             ),
             appreciation=Appreciation(
                 taux_annuel_estime_pct=1.5, ajustements={"dpe": -0.8, "construction": -0.05},
-                taux_final_pct=0.65, methode="weighted_cagr_momentum",
+                taux_final_pct=0.65, methode="weighted_loglinear_regression",
                 scenarios={
                     "pessimiste": Scenario(taux_pct=-2.0, label="Marche en ralentissement"),
                     "pragmatique": Scenario(taux_pct=-0.15, label="Tendance historique maintenue"),
@@ -583,7 +664,7 @@ class TestIntegrationAppreciation:
         # Appreciation
         a = data["appreciation"]
         assert a["taux_final_pct"] is not None
-        assert a["methode"] == "weighted_cagr_momentum"
+        assert a["methode"] == "weighted_loglinear_regression"
         assert a["scenarios"]["pessimiste"]["taux_pct"] < a["scenarios"]["pragmatique"]["taux_pct"]
         assert a["scenarios"]["pragmatique"]["taux_pct"] < a["scenarios"]["optimiste"]["taux_pct"]
 
