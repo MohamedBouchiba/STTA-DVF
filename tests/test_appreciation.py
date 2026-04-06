@@ -10,6 +10,8 @@ from src.api.main import app
 from src.estimation.appreciation import (
     _compute_cagr,
     _compute_cagr_regression,
+    _haversine_km,
+    _compute_proximity_adjustment,
     _surface_segment,
     _construction_period_key,
     compute_appreciation,
@@ -17,6 +19,9 @@ from src.estimation.appreciation import (
     CONSTRUCTION_ADJUSTMENT,
     COPRO_ADJUSTMENT,
     MIN_SEM_TRANSACTIONS,
+    PARIS_CENTER_LAT,
+    PARIS_CENTER_LON,
+    GPE_BONUS,
 )
 
 client = TestClient(app)
@@ -197,6 +202,65 @@ class TestComputeCagrRegression:
         assert abs(cagr_default - cagr_no_decay) < 1.0
 
 
+class TestHaversineKm:
+    def test_same_point(self):
+        assert _haversine_km(48.85, 2.35, 48.85, 2.35) == 0.0
+
+    def test_paris_saint_denis(self):
+        # Saint-Denis ~9km au nord de Paris centre
+        dist = _haversine_km(48.9362, 2.3574, PARIS_CENTER_LAT, PARIS_CENTER_LON)
+        assert 8.0 < dist < 10.0
+
+    def test_paris_melun(self):
+        # Melun ~45km au sud-est de Paris
+        dist = _haversine_km(48.5421, 2.6553, PARIS_CENTER_LAT, PARIS_CENTER_LON)
+        assert 35.0 < dist < 55.0
+
+
+class TestProximityAdjustment:
+    def test_paris_intramuros(self):
+        """Paris centre (< 3km) -> pas de bonus."""
+        prox, gpe = _compute_proximity_adjustment(48.8606, 2.3376, "75")
+        assert prox == 0.0
+        assert gpe == 0.0
+
+    def test_petite_couronne_93(self):
+        """Saint-Denis (93, ~9km) -> bonus proximite + GPE."""
+        prox, gpe = _compute_proximity_adjustment(48.9362, 2.3574, "93")
+        assert prox > 0
+        assert gpe == GPE_BONUS
+
+    def test_grande_couronne_77(self):
+        """Melun (77, ~45km) -> pas de bonus (trop loin)."""
+        prox, gpe = _compute_proximity_adjustment(48.5421, 2.6553, "77")
+        assert prox == 0.0
+        assert gpe == 0.0
+
+    def test_hors_idf_13(self):
+        """Marseille (13) -> aucun bonus."""
+        prox, gpe = _compute_proximity_adjustment(43.2965, 5.3698, "13")
+        assert prox == 0.0
+        assert gpe == 0.0
+
+    def test_no_coordinates(self):
+        """Sans coordonnees -> aucun bonus."""
+        prox, gpe = _compute_proximity_adjustment(None, None, "93")
+        assert prox == 0.0
+        assert gpe == 0.0
+
+    def test_petite_couronne_92(self):
+        """Boulogne (92, ~8km) -> bonus proximite + GPE."""
+        prox, gpe = _compute_proximity_adjustment(48.8397, 2.2399, "92")
+        assert prox > 0
+        assert gpe == GPE_BONUS
+
+    def test_grande_couronne_with_bonus(self):
+        """Versailles (78, ~17km) -> bonus proximite, pas de GPE."""
+        prox, gpe = _compute_proximity_adjustment(48.8014, 2.1301, "78")
+        assert prox > 0
+        assert gpe == 0.0
+
+
 # ---------------------------------------------------------------------------
 # Unit tests : compute_appreciation (mocke)
 # ---------------------------------------------------------------------------
@@ -265,6 +329,8 @@ class TestComputeAppreciation:
             type_bien="appartement",
             surface=55,
             prix_achat=350000,
+            latitude=48.86,
+            longitude=2.38,
         )
 
         assert result.historique.cagr_total_pct is not None
@@ -308,18 +374,21 @@ class TestComputeAppreciation:
         result_no_dpe = compute_appreciation(
             code_commune="75111", type_bien="appartement",
             surface=55, prix_achat=350000,
+            latitude=48.86, longitude=2.38,
         )
 
         # Avec DPE G
         result_g = compute_appreciation(
             code_commune="75111", type_bien="appartement",
             surface=55, prix_achat=350000, dpe_classe="G",
+            latitude=48.86, longitude=2.38,
         )
 
         # Avec DPE A
         result_a = compute_appreciation(
             code_commune="75111", type_bien="appartement",
             surface=55, prix_achat=350000, dpe_classe="A",
+            latitude=48.86, longitude=2.38,
         )
 
         assert result_g.appreciation.taux_final_pct < result_no_dpe.appreciation.taux_final_pct
@@ -341,12 +410,14 @@ class TestComputeAppreciation:
         result_old = compute_appreciation(
             code_commune="75111", type_bien="appartement",
             surface=55, prix_achat=350000, annee_construction=1880,
+            latitude=48.86, longitude=2.38,
         )
 
         # Grands ensembles (malus)
         result_60s = compute_appreciation(
             code_commune="75111", type_bien="appartement",
             surface=55, prix_achat=350000, annee_construction=1965,
+            latitude=48.86, longitude=2.38,
         )
 
         assert result_old.appreciation.taux_final_pct > result_60s.appreciation.taux_final_pct
@@ -366,6 +437,7 @@ class TestComputeAppreciation:
         result = compute_appreciation(
             code_commune="75111", type_bien="appartement",
             surface=55, prix_achat=350000, horizon_annees=10,
+            latitude=48.86, longitude=2.38,
         )
 
         assert result.projection.horizon_annees == 10
@@ -388,6 +460,7 @@ class TestComputeAppreciation:
         result = compute_appreciation(
             code_commune="23001", type_bien="maison",
             surface=100, prix_achat=150000,
+            latitude=46.17, longitude=1.87,
         )
 
         assert result.historique.source == "departement"
@@ -427,6 +500,7 @@ class TestComputeAppreciation:
         result = compute_appreciation(
             code_commune="75111", type_bien="appartement",
             surface=55, prix_achat=350000, dpe_classe="G",
+            latitude=48.86, longitude=2.38,
         )
 
         dpe_risks = [r for r in result.risques if r.facteur == "dpe"]

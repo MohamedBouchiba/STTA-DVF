@@ -160,6 +160,31 @@ SURFACE_GRAND = 80.0
 # Seuil minimum de transactions par semestre pour la regression
 MIN_SEM_TRANSACTIONS = 5
 
+# Centre de Paris pour calcul de distance
+PARIS_CENTER_LAT = 48.8566
+PARIS_CENTER_LON = 2.3522
+
+# Departements IDF
+IDF_DEPTS = {"75", "77", "78", "91", "92", "93", "94", "95"}
+
+# Departements petite couronne (direct GPE)
+GPE_DEPTS = {"92", "93", "94"}
+
+# Bonus max proximite (%/an)
+PROXIMITY_MAX_BONUS = 0.8
+
+# Bonus Grand Paris Express (%/an)
+GPE_BONUS = 0.5
+
+# Rayon max d'effet proximite (km)
+PROXIMITY_MAX_DISTANCE = 40.0
+
+# Distance min (Paris intra-muros, pas de bonus)
+PROXIMITY_MIN_DISTANCE = 3.0
+
+# Rayon max d'effet GPE (km)
+GPE_MAX_DISTANCE = 20.0
+
 
 # ---------------------------------------------------------------------------
 # Fonctions utilitaires
@@ -245,6 +270,53 @@ def _construction_period_key(annee: int | None) -> str | None:
     if annee <= 2005:
         return "1990_2005"
     return "apres_2005"
+
+
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Distance haversine en kilometres entre deux points GPS."""
+    R = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = (math.sin(dlat / 2) ** 2
+         + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2))
+         * math.sin(dlon / 2) ** 2)
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def _compute_proximity_adjustment(
+    latitude: float | None,
+    longitude: float | None,
+    code_departement: str,
+) -> tuple[float, float]:
+    """Calcule les bonus proximite Paris + Grand Paris Express.
+
+    Returns:
+        (proximity_bonus, gpe_bonus) en %/an.
+    """
+    if latitude is None or longitude is None:
+        return 0.0, 0.0
+
+    if code_departement not in IDF_DEPTS:
+        return 0.0, 0.0
+
+    dist = _haversine_km(latitude, longitude, PARIS_CENTER_LAT, PARIS_CENTER_LON)
+
+    # Proximite Paris (lineaire decroissant)
+    if dist < PROXIMITY_MIN_DISTANCE:
+        prox = 0.0  # Paris intra-muros : deja premium
+    elif dist >= PROXIMITY_MAX_DISTANCE:
+        prox = 0.0
+    else:
+        prox = PROXIMITY_MAX_BONUS * (1.0 - (dist - PROXIMITY_MIN_DISTANCE)
+                                       / (PROXIMITY_MAX_DISTANCE - PROXIMITY_MIN_DISTANCE))
+    prox = round(max(prox, 0.0), 2)
+
+    # Grand Paris Express (petite couronne < 20km)
+    gpe = 0.0
+    if code_departement in GPE_DEPTS and dist <= GPE_MAX_DISTANCE:
+        gpe = GPE_BONUS
+
+    return prox, gpe
 
 
 # ---------------------------------------------------------------------------
@@ -387,6 +459,8 @@ def compute_appreciation(
     etat_copropriete: str | None = None,
     zone_tendue: bool | None = None,
     travaux_prevus: float | None = None,
+    latitude: float | None = None,
+    longitude: float | None = None,
     horizon_annees: int = 5,
     taux_inflation: float = 2.0,
 ) -> AppreciationResult:
@@ -528,7 +602,7 @@ def compute_appreciation(
 
     if cagr_total is not None:
         components.append(cagr_total)
-        weights.append(0.50)
+        weights.append(0.55)
 
     if cagr_3ans is not None:
         components.append(cagr_3ans)
@@ -541,13 +615,13 @@ def compute_appreciation(
     if trend_12m is not None:
         # Mean-reversion : plafonner trend_12m si trop eloigne du CAGR
         trend_capped = trend_12m
-        if cagr_total is not None and abs(trend_12m - cagr_total) > 8.0:
-            trend_capped = cagr_total + 8.0 * (1 if trend_12m > cagr_total else -1)
+        if cagr_total is not None and abs(trend_12m - cagr_total) > 5.0:
+            trend_capped = cagr_total + 5.0 * (1 if trend_12m > cagr_total else -1)
         components.append(trend_capped)
-        weights.append(0.20)
+        weights.append(0.15)
     elif cagr_total is not None:
         components.append(cagr_total)
-        weights.append(0.20)
+        weights.append(0.15)
 
     if components:
         total_w = sum(weights)
@@ -590,6 +664,15 @@ def compute_appreciation(
         adj_travaux = round(min(travaux_ratio * 3.0, 0.5), 2)
         if adj_travaux > 0:
             ajustements["travaux"] = adj_travaux
+
+    # Proximite Paris + Grand Paris Express
+    prox_bonus, gpe_bonus = _compute_proximity_adjustment(
+        latitude, longitude, code_dept,
+    )
+    if prox_bonus > 0:
+        ajustements["proximite_paris"] = prox_bonus
+    if gpe_bonus > 0:
+        ajustements["grand_paris_express"] = gpe_bonus
 
     total_ajustement = sum(ajustements.values())
     taux_final = round(taux_base + total_ajustement, 2)
@@ -717,6 +800,12 @@ def compute_appreciation(
     elif last_12m_txn > 0:
         risques.append(Risque("liquidite", "eleve",
             f"{last_12m_txn} transactions/an — marche peu liquide"))
+
+    # Proximite Paris / GPE
+    if "proximite_paris" in ajustements or "grand_paris_express" in ajustements:
+        total_prox = ajustements.get("proximite_paris", 0) + ajustements.get("grand_paris_express", 0)
+        risques.append(Risque("infrastructures", "positif",
+            f"Proximite Paris + Grand Paris Express : +{total_prox:.1f}%/an"))
 
     # -----------------------------------------------------------------------
     # Etape 11 : Confiance

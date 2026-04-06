@@ -30,10 +30,10 @@ CAGR = (exp(slope) - 1) x 100
 ### Formule du taux de base
 
 ```
-taux_base = 0.50 x CAGR_total + 0.30 x CAGR_3ans + 0.20 x trend_12m
+taux_base = 0.55 x CAGR_total + 0.30 x CAGR_3ans + 0.15 x trend_12m
 ```
 
-Avec mean-reversion : si `trend_12m` s'ecarte de plus de 8 points du CAGR total, il est plafonne.
+Avec mean-reversion : si `trend_12m` s'ecarte de plus de 5 points du CAGR total, il est plafonne.
 
 ### Ajustements appliques au taux
 
@@ -44,6 +44,8 @@ Avec mean-reversion : si `trend_12m` s'ecarte de plus de 8 points du CAGR total,
 | **Copropriete** | saine: +0.1%, correcte: 0%, en_difficulte: -0.3% | Impact sur valeur future |
 | **Zone tendue** | true: +0.3% | Pression haussiere demande locative |
 | **Travaux** | proportionnel au ratio travaux/prix (max +0.5%) | Amelioration DPE post-travaux |
+| **Proximite Paris** | +0 a +0.8%/an, degressif lineaire (3-40km) | IDF uniquement, Paris intra-muros exclu |
+| **Grand Paris Express** | +0.5%/an pour 92/93/94 dans 20km | Effet infrastructure lignes 15/16/17 |
 
 ### Scenarios
 

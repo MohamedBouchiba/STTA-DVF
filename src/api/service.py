@@ -437,6 +437,8 @@ def process_appreciation(request: AppreciationRequest) -> AppreciationResponse:
         etat_copropriete=request.etat_copropriete,
         zone_tendue=request.zone_tendue,
         travaux_prevus=request.travaux_prevus,
+        latitude=geo.latitude,
+        longitude=geo.longitude,
         horizon_annees=request.horizon_annees,
         taux_inflation=request.taux_inflation,
     )
